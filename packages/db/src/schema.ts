@@ -1,0 +1,272 @@
+import { sql } from "drizzle-orm";
+import {
+  boolean,
+  index,
+  integer,
+  jsonb,
+  pgTable,
+  primaryKey,
+  real,
+  text,
+  timestamp,
+  uniqueIndex,
+  vector,
+} from "drizzle-orm/pg-core";
+
+const id = () => text("id").primaryKey();
+const createdAt = () => timestamp("created_at", { withTimezone: true }).notNull().defaultNow();
+const updatedAt = () => timestamp("updated_at", { withTimezone: true }).notNull().defaultNow();
+
+// ------------------------------------------------------------------ accounts
+
+export const organisations = pgTable("organisations", {
+  id: id(),
+  name: text("name").notNull(),
+  /** §47 — free | creator | pro | organisation */
+  plan: text("plan").notNull().default("free"),
+  country: text("country").default(""),
+  createdAt: createdAt(),
+});
+
+export const users = pgTable(
+  "users",
+  {
+    id: id(),
+    email: text("email").notNull(),
+    name: text("name").default(""),
+    /** Curators and designers get access to the annotation tool (§38). */
+    role: text("role").notNull().default("member"),
+    createdAt: createdAt(),
+  },
+  (table) => [uniqueIndex("users_email_idx").on(table.email)],
+);
+
+export const memberships = pgTable(
+  "memberships",
+  {
+    userId: text("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+    organisationId: text("organisation_id").notNull().references(() => organisations.id, { onDelete: "cascade" }),
+    role: text("role").notNull().default("member"),
+    createdAt: createdAt(),
+  },
+  (table) => [primaryKey({ columns: [table.userId, table.organisationId] })],
+);
+
+// ---------------------------------------------------------------- brand kits
+
+export const brandKits = pgTable(
+  "brand_kits",
+  {
+    id: id(),
+    organisationId: text("organisation_id").notNull().references(() => organisations.id, { onDelete: "cascade" }),
+    name: text("name").notNull(),
+    data: jsonb("data").notNull(),
+    /** §46 — learned style preferences for this organisation. */
+    preferences: jsonb("preferences").notNull().default(sql`'{}'::jsonb`),
+    createdAt: createdAt(),
+    updatedAt: updatedAt(),
+  },
+  (table) => [index("brand_kits_org_idx").on(table.organisationId)],
+);
+
+// -------------------------------------------------------------------- assets
+
+export const assets = pgTable(
+  "assets",
+  {
+    id: id(),
+    organisationId: text("organisation_id").references(() => organisations.id, { onDelete: "cascade" }),
+    kind: text("kind").notNull(),
+    storageKey: text("storage_key").notNull(),
+    /** Cutout produced by background removal (§7). */
+    cutoutKey: text("cutout_key"),
+    maskKey: text("mask_key"),
+    mimeType: text("mime_type").notNull(),
+    width: integer("width").notNull(),
+    height: integer("height").notNull(),
+    bytes: integer("bytes").notNull().default(0),
+    /** §8 — cached computer-vision analysis. */
+    analysis: jsonb("analysis"),
+    createdAt: createdAt(),
+  },
+  (table) => [index("assets_org_idx").on(table.organisationId)],
+);
+
+// ------------------------------------------------------------------ projects
+
+export const projects = pgTable(
+  "projects",
+  {
+    id: id(),
+    organisationId: text("organisation_id").notNull().references(() => organisations.id, { onDelete: "cascade" }),
+    name: text("name").notNull(),
+    category: text("category").notNull().default("church"),
+    brief: jsonb("brief").notNull(),
+    brandKitId: text("brand_kit_id").references(() => brandKits.id, { onDelete: "set null" }),
+    createdAt: createdAt(),
+    updatedAt: updatedAt(),
+  },
+  (table) => [index("projects_org_idx").on(table.organisationId)],
+);
+
+export const designs = pgTable(
+  "designs",
+  {
+    id: id(),
+    projectId: text("project_id").notNull().references(() => projects.id, { onDelete: "cascade" }),
+    title: text("title").notNull().default(""),
+    format: text("format").notNull().default("ig-portrait"),
+    composition: text("composition").notNull().default(""),
+    styleDirection: text("style_direction").notNull().default(""),
+    /** Pointer to the current version. */
+    currentVersionId: text("current_version_id"),
+    /** §66 — the score of the current version. */
+    vqs: real("vqs").notNull().default(0),
+    exported: boolean("exported").notNull().default(false),
+    createdAt: createdAt(),
+    updatedAt: updatedAt(),
+  },
+  (table) => [index("designs_project_idx").on(table.projectId)],
+);
+
+/** §26 — every AI or manual modification creates a version. */
+export const designVersions = pgTable(
+  "design_versions",
+  {
+    id: id(),
+    designId: text("design_id").notNull().references(() => designs.id, { onDelete: "cascade" }),
+    parentId: text("parent_id"),
+    label: text("label").notNull().default(""),
+    /** The complete DesignDocument (§62). */
+    document: jsonb("document").notNull(),
+    /** The patch that produced this version, when it came from an edit. */
+    patch: jsonb("patch"),
+    qaReport: jsonb("qa_report"),
+    vqs: real("vqs").notNull().default(0),
+    previewKey: text("preview_key"),
+    source: text("source").notNull().default("generation"),
+    createdAt: createdAt(),
+  },
+  (table) => [index("design_versions_design_idx").on(table.designId)],
+);
+
+/** §41 — every candidate we generated, shown or not: the preference dataset. */
+export const generations = pgTable(
+  "generations",
+  {
+    id: id(),
+    projectId: text("project_id").notNull().references(() => projects.id, { onDelete: "cascade" }),
+    designId: text("design_id").references(() => designs.id, { onDelete: "set null" }),
+    plan: jsonb("plan").notNull(),
+    document: jsonb("document").notNull(),
+    dna: jsonb("dna").notNull(),
+    vqs: real("vqs").notNull().default(0),
+    shown: boolean("shown").notNull().default(false),
+    selected: boolean("selected").notNull().default(false),
+    plannerModel: text("planner_model").notNull().default(""),
+    composition: text("composition").notNull().default(""),
+    durationMs: integer("duration_ms").notNull().default(0),
+    createdAt: createdAt(),
+  },
+  (table) => [index("generations_project_idx").on(table.projectId)],
+);
+
+export const exports = pgTable(
+  "exports",
+  {
+    id: id(),
+    designId: text("design_id").notNull().references(() => designs.id, { onDelete: "cascade" }),
+    versionId: text("version_id").notNull(),
+    format: text("format").notNull(),
+    fileFormat: text("file_format").notNull().default("png"),
+    scale: real("scale").notNull().default(1),
+    storageKey: text("storage_key").notNull(),
+    watermarked: boolean("watermarked").notNull().default(false),
+    createdAt: createdAt(),
+  },
+  (table) => [index("exports_design_idx").on(table.designId)],
+);
+
+// --------------------------------------------------------- reference library
+
+/** §10 / §36 — the curated reference library. */
+export const referenceDesigns = pgTable(
+  "reference_designs",
+  {
+    id: id(),
+    title: text("title").notNull().default(""),
+    category: text("category").notNull(),
+    subcategory: text("subcategory").notNull().default(""),
+    sourceUrl: text("source_url").notNull().default(""),
+    sourceCredit: text("source_credit").notNull().default(""),
+    imageKey: text("image_key").notNull().default(""),
+    thumbnailKey: text("thumbnail_key").notNull().default(""),
+    composition: text("composition").notNull(),
+    characteristics: jsonb("characteristics").notNull().default(sql`'[]'::jsonb`),
+    typography: jsonb("typography").notNull(),
+    palette: jsonb("palette").notNull(),
+    imageTreatment: jsonb("image_treatment").notNull().default(sql`'[]'::jsonb`),
+    geometry: jsonb("geometry").notNull(),
+    dna: jsonb("dna").notNull(),
+    styleDirections: jsonb("style_directions").notNull().default(sql`'[]'::jsonb`),
+    /** §10 — only strong references reach retrieval. */
+    qualityScore: integer("quality_score").notNull().default(0),
+    approved: boolean("approved").notNull().default(false),
+    reviewedBy: text("reviewed_by").notNull().default(""),
+    notes: text("notes").notNull().default(""),
+    createdAt: createdAt(),
+  },
+  (table) => [
+    index("reference_category_idx").on(table.category, table.subcategory),
+    index("reference_quality_idx").on(table.qualityScore),
+  ],
+);
+
+/** §12 / §35 — pgvector index over reference descriptions. */
+export const referenceEmbeddings = pgTable(
+  "reference_embeddings",
+  {
+    referenceId: text("reference_id")
+      .primaryKey()
+      .references(() => referenceDesigns.id, { onDelete: "cascade" }),
+    model: text("model").notNull(),
+    dimensions: integer("dimensions").notNull(),
+    embedding: vector("embedding", { dimensions: 1536 }),
+    text: text("text").notNull().default(""),
+    createdAt: createdAt(),
+  },
+  (table) => [
+    index("reference_embedding_idx").using("hnsw", table.embedding.op("vector_cosine_ops")),
+  ],
+);
+
+// ------------------------------------------------------- behavioural signals
+
+/** §41 — anonymous-by-default behavioural signals that train the ranker. */
+export const events = pgTable(
+  "events",
+  {
+    id: id(),
+    organisationId: text("organisation_id"),
+    projectId: text("project_id"),
+    designId: text("design_id"),
+    type: text("type").notNull(),
+    payload: jsonb("payload").notNull().default(sql`'{}'::jsonb`),
+    createdAt: createdAt(),
+  },
+  (table) => [index("events_type_idx").on(table.type), index("events_design_idx").on(table.designId)],
+);
+
+/** §48 — design credits, not tokens. */
+export const creditLedger = pgTable(
+  "credit_ledger",
+  {
+    id: id(),
+    organisationId: text("organisation_id").notNull().references(() => organisations.id, { onDelete: "cascade" }),
+    delta: integer("delta").notNull(),
+    reason: text("reason").notNull(),
+    balanceAfter: integer("balance_after").notNull(),
+    createdAt: createdAt(),
+  },
+  (table) => [index("credit_org_idx").on(table.organisationId)],
+);

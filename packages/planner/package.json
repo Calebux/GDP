@@ -1,0 +1,13 @@
+{
+  "name": "@gdp/planner",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "main": "./src/index.ts",
+  "types": "./src/index.ts",
+  "exports": {
+    ".": "./src/index.ts",
+    "./*": "./src/*.ts"
+  },
+  "dependencies": { "@gdp/core": "*", "@gdp/design-schema": "*", "@gdp/design-dna": "*", "@gdp/fonts": "*", "@gdp/layout-engine": "*", "@gdp/typography": "*", "@anthropic-ai/sdk": "^0.122.0", "openai": "^7.8.0", "zod": "^4.5.4" }
+}

@@ -1,0 +1,39 @@
+{
+  "name": "gdp",
+  "private": true,
+  "version": "0.1.0",
+  "description": "AI Professional Graphic Design Platform \u2014 structured design documents, deterministic rendering.",
+  "workspaces": [
+    "apps/*",
+    "packages/*"
+  ],
+  "engines": {
+    "node": ">=22"
+  },
+  "scripts": {
+    "dev": "npm run dev --workspace=apps/web",
+    "build": "npm run build --workspace=apps/web",
+    "start": "npm run start --workspace=apps/web",
+    "typecheck": "tsc -b --pretty",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "lint": "next lint --dir apps/web",
+    "fonts:sync": "tsx scripts/sync-fonts.ts",
+    "db:generate": "drizzle-kit generate --config=packages/db/drizzle.config.ts",
+    "db:migrate": "tsx scripts/db-migrate.ts",
+    "db:push": "drizzle-kit push --config=packages/db/drizzle.config.ts",
+    "db:setup": "tsx scripts/db-setup.ts",
+    "seed": "tsx scripts/seed.ts",
+    "render:demo": "tsx scripts/render-demo.ts",
+    "eval": "tsx scripts/run-evals.ts",
+    "vision:dev": "cd services/vision && uvicorn app.main:app --reload --port 8008",
+    "demo:generate": "tsx scripts/generate-demo.ts"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.5",
+    "drizzle-kit": "^0.31.10",
+    "tsx": "^4.23.13",
+    "typescript": "^5.9.3",
+    "vitest": "^4.1.11"
+  }
+}

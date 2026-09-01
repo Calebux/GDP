@@ -1,0 +1,41 @@
+{
+  "name": "@gdp/web",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "dev": "next dev -p 3000",
+    "build": "next build",
+    "start": "next start -p 3000",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@gdp/core": "*",
+    "@gdp/db": "*",
+    "@gdp/design-dna": "*",
+    "@gdp/design-schema": "*",
+    "@gdp/fonts": "*",
+    "@gdp/layout-engine": "*",
+    "@gdp/planner": "*",
+    "@gdp/qa": "*",
+    "@gdp/renderer": "*",
+    "@gdp/retrieval": "*",
+    "@gdp/storage": "*",
+    "@gdp/typography": "*",
+    "clsx": "^2.1.1",
+    "konva": "^10.3.2",
+    "next": "^16.3.4",
+    "react": "^19.2.8",
+    "react-dom": "^19.2.8",
+    "react-konva": "^19.2.5",
+    "use-image": "^1.1.4",
+    "zod": "^4.5.4",
+    "zustand": "^5.0.9"
+  },
+  "devDependencies": {
+    "@tailwindcss/postcss": "^4.3.3",
+    "@types/react": "^19.2.7",
+    "@types/react-dom": "^19.2.4",
+    "tailwindcss": "^4.3.3",
+    "typescript": "^5.9.3"
+  }
+}

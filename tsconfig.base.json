@@ -1,0 +1,43 @@
+{
+  "compilerOptions": {
+    "target": "ES2023",
+    "lib": ["ES2023", "DOM", "DOM.Iterable"],
+    "module": "ESNext",
+    "moduleResolution": "Bundler",
+    "resolveJsonModule": true,
+    "allowJs": false,
+    "strict": true,
+    "noUncheckedIndexedAccess": true,
+    "noImplicitOverride": true,
+    "exactOptionalPropertyTypes": false,
+    "skipLibCheck": true,
+    "esModuleInterop": true,
+    "allowSyntheticDefaultImports": true,
+    "forceConsistentCasingInFileNames": true,
+    "isolatedModules": true,
+    "verbatimModuleSyntax": false,
+    "noEmit": true,
+    "jsx": "preserve",
+    "baseUrl": ".",
+    "paths": {
+      "@gdp/core": ["packages/core/src/index.ts"],
+      "@gdp/core/*": ["packages/core/src/*"],
+      "@gdp/design-schema": ["packages/design-schema/src/index.ts"],
+      "@gdp/design-schema/*": ["packages/design-schema/src/*"],
+      "@gdp/fonts": ["packages/fonts/src/index.ts"],
+      "@gdp/fonts/*": ["packages/fonts/src/*"],
+      "@gdp/typography": ["packages/typography/src/index.ts"],
+      "@gdp/layout-engine": ["packages/layout-engine/src/index.ts"],
+      "@gdp/renderer": ["packages/renderer/src/index.ts"],
+      "@gdp/design-dna": ["packages/design-dna/src/index.ts"],
+      "@gdp/planner": ["packages/planner/src/index.ts"],
+      "@gdp/planner/*": ["packages/planner/src/*"],
+      "@gdp/qa": ["packages/qa/src/index.ts"],
+      "@gdp/retrieval": ["packages/retrieval/src/index.ts"],
+      "@gdp/db": ["packages/db/src/index.ts"],
+      "@gdp/db/*": ["packages/db/src/*"],
+      "@gdp/storage": ["packages/storage/src/index.ts"]
+    }
+  },
+  "exclude": ["node_modules", "**/dist", "**/.next"]
+}

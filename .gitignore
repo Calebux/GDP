@@ -1,0 +1,26 @@
+node_modules/
+.next/
+dist/
+.turbo/
+*.tsbuildinfo
+
+# env
+.env
+.env.local
+.env.*.local
+
+# runtime artefacts
+/storage-dev/
+/assets/fonts/**/*.ttf
+/assets/fonts/**/*.otf
+/assets/fonts/**/*.woff2
+/out/
+/tmp/
+coverage/
+
+# python
+services/vision/.venv/
+__pycache__/
+*.pyc
+
+.DS_Store
