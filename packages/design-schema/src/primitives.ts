@@ -153,6 +153,10 @@ export const SlotRole = z.enum([
   "secondary-subject",
   "eyebrow",
   "headline",
+  /** The promotion itself — "20% OFF", "BOGO", "$15 CUTS". Outranks the occasion. */
+  "offer",
+  "offer-detail",
+  "promo-code",
   "subheadline",
   "body",
   "date",
@@ -175,6 +179,9 @@ export type SlotRole = z.infer<typeof SlotRole>;
 export const TEXT_SLOTS: SlotRole[] = [
   "eyebrow",
   "headline",
+  "offer",
+  "offer-detail",
+  "promo-code",
   "subheadline",
   "body",
   "date",

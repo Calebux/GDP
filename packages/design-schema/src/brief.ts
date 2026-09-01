@@ -6,7 +6,14 @@ export const DesignBrief = z.object({
   category: z.string().default("church"),
   /** e.g. "sunday-service", "conference", "worship-night" */
   subcategory: z.string().default("sunday-service"),
+  /** The occasion: "Valentine's Special", "Grand Opening", "Black Friday". */
   eventTitle: z.string().max(120).default(""),
+  /** The promotion itself. For a promo this, not the occasion, is the message. */
+  offer: z.string().max(80).default(""),
+  offerDetail: z.string().max(120).default(""),
+  promoCode: z.string().max(40).default(""),
+  /** "nail-salon", "barber", "restaurant"… drives style-direction matching. */
+  businessType: z.string().default(""),
   seriesName: z.string().max(120).default(""),
   organisationName: z.string().max(120).default(""),
   date: z.string().max(80).default(""),

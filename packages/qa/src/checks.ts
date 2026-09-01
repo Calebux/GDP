@@ -205,13 +205,17 @@ export function checkComposition(doc: DesignDocument): ComponentScore {
   }
 
   // Emptiness: a poster that uses under a fifth of its canvas reads as unfinished.
+  // Type covers less area than photography for the same visual presence, so a
+  // design with no imagery is held to a lower — but still real — floor.
   const coverage = inkCoverage(doc);
-  if (coverage < 0.22) {
+  const hasImagery = doc.layers.some((l) => l.visible && l.type === "image" && l.slot !== "logo");
+  const floor = hasImagery ? 0.22 : 0.13;
+  if (coverage < floor) {
     issues.push({
       code: "sparse",
       severity: "warn",
       message: `only ${Math.round(coverage * 100)}% of the canvas carries content`,
-      penalty: (0.22 - coverage) * 120,
+      penalty: (floor - coverage) * 160,
     });
   }
   if (coverage > 0.82) {
@@ -300,7 +304,11 @@ function weightBalance(doc: DesignDocument): { horizontal: number; vertical: num
   let bottom = 0;
   for (const layer of doc.layers) {
     if (!layer.visible || layer.slot === "background" || layer.slot === "texture") continue;
-    const b = boundsOf(layer);
+    // Use the column a text layer was allocated, not its tight glyph box —
+    // otherwise every left-aligned editorial poster reads as "unbalanced".
+    const b = isText(layer)
+      ? { x: layer.x, y: layer.y, width: layer.width, height: layer.height }
+      : boundsOf(layer);
     const area = Math.max(1, b.width * b.height) * (isText(layer) ? 1.4 : 1);
     const centreX = b.x + b.width / 2;
     const centreY = b.y + b.height / 2;
@@ -333,8 +341,10 @@ export function checkHierarchy(doc: DesignDocument): ComponentScore {
   const texts = doc.layers.filter(isText).filter((l) => l.visible);
   if (texts.length === 0) return component("hierarchy", issues);
 
-  const headline = texts.find((t) => t.slot === "headline");
-  const others = texts.filter((t) => t.slot !== "headline");
+  // The focal point is whichever role dominates: an event's title, or a
+  // promotion's offer. A promo poster has no "headline" and needs none.
+  const headline = texts.find((t) => t.slot === "offer") ?? texts.find((t) => t.slot === "headline");
+  const others = texts.filter((t) => t.id !== headline?.id);
 
   if (headline && others.length > 0) {
     const nextLargest = Math.max(...others.map((t) => t.fontSize));
@@ -363,9 +373,9 @@ export function checkHierarchy(doc: DesignDocument): ComponentScore {
     }
   } else if (!headline) {
     issues.push({
-      code: "no-headline",
+      code: "no-focal-point",
       severity: "error",
-      message: "no headline layer — there is no focal point",
+      message: "nothing dominates — the design has no focal point",
       penalty: 35,
     });
   }
@@ -398,7 +408,10 @@ export function checkSpacing(doc: DesignDocument): ComponentScore {
     const current = texts[i]!;
     const gap = current.y - (previous.y + previous.height);
     if (gap < -1) continue; // overlap is a composition issue, counted there
-    if (gap >= 0 && gap < previous.fontSize * 0.12 && previous.slot !== current.slot) {
+    // Judge the gap against the *smaller* of the two sizes: a 150px offer
+    // followed by 30px detail does not need a 20px gap to breathe.
+    const reference = Math.min(previous.fontSize, current.fontSize);
+    if (gap >= 0 && gap < reference * 0.3 && previous.slot !== current.slot) {
       issues.push({
         code: "crowded",
         severity: "warn",

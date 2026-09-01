@@ -24,6 +24,11 @@ export interface Regions {
   overlay: "bottom-gradient" | "full-scrim" | "diagonal" | null;
   /** Hint for how much the headline may dominate, 0–1. */
   headlineDominance: number;
+  /**
+   * Grow the type until it fills the region. Set automatically when there is no
+   * photograph to hold the lower half — the commonest small-business case.
+   */
+  fillStack: boolean;
 }
 
 export interface ArchetypeOptions {
@@ -57,6 +62,7 @@ const BUILDERS: Record<CompositionArchetype, Builder> = {
     fullBleedImage: false,
     overlay: null,
     headlineDominance: 0.62,
+    fillStack: false,
   }),
 
   "portrait-left-headline-right": (canvas, box) => ({
@@ -72,6 +78,7 @@ const BUILDERS: Record<CompositionArchetype, Builder> = {
     fullBleedImage: false,
     overlay: null,
     headlineDominance: 0.62,
+    fillStack: false,
   }),
 
   "portrait-center-headline-above": (canvas, box) => ({
@@ -87,6 +94,7 @@ const BUILDERS: Record<CompositionArchetype, Builder> = {
     fullBleedImage: false,
     overlay: null,
     headlineDominance: 0.55,
+    fillStack: false,
   }),
 
   "portrait-center-headline-behind": (canvas, box) => ({
@@ -102,6 +110,7 @@ const BUILDERS: Record<CompositionArchetype, Builder> = {
     fullBleedImage: false,
     overlay: null,
     headlineDominance: 0.78,
+    fillStack: false,
   }),
 
   "headline-dominant-portrait-small": (canvas, box) => ({
@@ -117,6 +126,7 @@ const BUILDERS: Record<CompositionArchetype, Builder> = {
     fullBleedImage: false,
     overlay: null,
     headlineDominance: 0.85,
+    fillStack: false,
   }),
 
   "full-bleed-image-bottom-stack": (canvas, box) => ({
@@ -132,6 +142,7 @@ const BUILDERS: Record<CompositionArchetype, Builder> = {
     fullBleedImage: true,
     overlay: "bottom-gradient",
     headlineDominance: 0.6,
+    fillStack: false,
   }),
 
   "split-diagonal": (canvas, box) => ({
@@ -147,6 +158,7 @@ const BUILDERS: Record<CompositionArchetype, Builder> = {
     fullBleedImage: false,
     overlay: "diagonal",
     headlineDominance: 0.66,
+    fillStack: false,
   }),
 
   "editorial-grid": (canvas, box) => ({
@@ -162,6 +174,7 @@ const BUILDERS: Record<CompositionArchetype, Builder> = {
     fullBleedImage: false,
     overlay: null,
     headlineDominance: 0.72,
+    fillStack: false,
   }),
 
   "stacked-center-minimal": (canvas, box) => ({
@@ -177,6 +190,7 @@ const BUILDERS: Record<CompositionArchetype, Builder> = {
     fullBleedImage: false,
     overlay: null,
     headlineDominance: 0.5,
+    fillStack: false,
   }),
 
   "two-person-split": (canvas, box) => ({
@@ -195,6 +209,7 @@ const BUILDERS: Record<CompositionArchetype, Builder> = {
     fullBleedImage: false,
     overlay: null,
     headlineDominance: 0.52,
+    fillStack: false,
   }),
 
   "three-speaker-row": (canvas, box) => {
@@ -216,13 +231,14 @@ const BUILDERS: Record<CompositionArchetype, Builder> = {
       fullBleedImage: false,
       overlay: null,
       headlineDominance: 0.5,
+      fillStack: false,
     };
   },
 
   "typographic-poster": (_canvas, box) => ({
     subjects: [],
     subjectAnchor: "bottom",
-    textStack: r(box.x, box.y + box.height * 0.08, box.width, box.height * 0.7),
+    textStack: r(box.x, box.y + box.height * 0.02, box.width, box.height * 0.84),
     textAlign: "left",
     stackAnchor: "middle",
     logo: r(box.x, box.y, box.width * 0.24, box.height * 0.05),
@@ -232,6 +248,41 @@ const BUILDERS: Record<CompositionArchetype, Builder> = {
     fullBleedImage: false,
     overlay: null,
     headlineDominance: 0.95,
+    fillStack: true,
+  }),
+
+  /** A colour field carrying the offer, details underneath. No photo needed. */
+  "offer-block-center": (canvas, box) => ({
+    subjects: [],
+    subjectAnchor: "middle",
+    textStack: r(box.x, box.y + box.height * 0.06, box.width, box.height * 0.62),
+    textAlign: "center",
+    stackAnchor: "middle",
+    logo: r(box.x + box.width * 0.35, box.y, box.width * 0.3, box.height * 0.05),
+    logoAlign: "center",
+    footer: r(box.x, box.y + box.height * 0.92, box.width, box.height * 0.08),
+    headlineBehindSubject: false,
+    fullBleedImage: false,
+    overlay: null,
+    headlineDominance: 1,
+    fillStack: true,
+  }),
+
+  /** Poster split into a shouting upper band and a quiet lower one. */
+  "banded-poster": (canvas, box) => ({
+    subjects: [bottomBleed(canvas, canvas.width * 0.52, canvas.width * 0.5, 0.42)],
+    subjectAnchor: "bottom",
+    textStack: r(box.x, box.y + box.height * 0.04, box.width, box.height * 0.5),
+    textAlign: "left",
+    stackAnchor: "top",
+    logo: r(box.x, box.y, box.width * 0.22, box.height * 0.045),
+    logoAlign: "left",
+    footer: r(box.x, box.y + box.height * 0.93, box.width, box.height * 0.07),
+    headlineBehindSubject: false,
+    fullBleedImage: false,
+    overlay: null,
+    headlineDominance: 0.9,
+    fillStack: true,
   }),
 };
 
@@ -257,7 +308,28 @@ export function regionsFor(
   const box = contentBox(canvas);
   const regions = builder(canvas, box, opts);
   const count = opts.subjectCount ?? regions.subjects.length;
-  return { ...regions, subjects: regions.subjects.slice(0, Math.max(0, count)) };
+  const subjects = regions.subjects.slice(0, Math.max(0, count));
+
+  // An archetype that expected a photograph but did not get one hands the space
+  // it reserved to the type, rather than leaving a hole where the photo was.
+  const orphaned = subjects.length === 0 && regions.subjects.length > 0;
+  const textStack = orphaned
+    ? {
+        ...regions.textStack,
+        height: Math.max(
+          regions.textStack.height,
+          regions.footer.y - canvas.gutter - regions.textStack.y,
+        ),
+      }
+    : regions.textStack;
+
+  return {
+    ...regions,
+    subjects,
+    textStack,
+    // With no photograph, nothing holds the lower half — the type has to.
+    fillStack: regions.fillStack || subjects.length === 0,
+  };
 }
 
 export const ARCHETYPE_NAMES = Object.keys(BUILDERS) as CompositionArchetype[];

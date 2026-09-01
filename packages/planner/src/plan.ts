@@ -66,7 +66,15 @@ function assetText(assets: AssetSummary[]): string {
  * deterministic planner, which is also what generates the candidate variants.
  */
 export async function planConcepts(input: PlanInput): Promise<PlanResult> {
-  const direction = input.direction ?? resolveDirection(input.brief.styleDirection, input.brief.feeling);
+  const direction =
+    input.direction ??
+    resolveDirection({
+      id: input.brief.styleDirection,
+      feeling: input.brief.feeling,
+      occasion: `${input.brief.eventTitle} ${input.brief.offer} ${input.brief.extraLines.join(" ")}`,
+      businessType: input.brief.businessType,
+      category: input.brief.category,
+    });
   const count = input.conceptCount ?? 3;
 
   const fallback = (): { concepts: DesignConceptPlan[] } => ({

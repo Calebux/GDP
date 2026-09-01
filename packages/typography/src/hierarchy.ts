@@ -10,6 +10,9 @@ import { familyMeta } from "@gdp/fonts";
 const ROLE_RATIO: Record<string, number> = {
   eyebrow: 0.0222,
   headline: 0.089,
+  offer: 0.125,
+  "offer-detail": 0.034,
+  "promo-code": 0.026,
   subheadline: 0.0315,
   body: 0.0198,
   date: 0.0296,
@@ -22,6 +25,9 @@ const ROLE_RATIO: Record<string, number> = {
 const ROLE_WEIGHT: Record<string, number> = {
   eyebrow: 600,
   headline: 800,
+  offer: 900,
+  "offer-detail": 500,
+  "promo-code": 700,
   subheadline: 500,
   body: 400,
   date: 700,
@@ -31,8 +37,9 @@ const ROLE_WEIGHT: Record<string, number> = {
   footer: 400,
 };
 
-const HEADLINE_ROLES = new Set(["headline"]);
-const ACCENT_ROLES = new Set(["eyebrow", "date", "cta"]);
+/** Roles that carry the display face and dominate the composition. */
+const HEADLINE_ROLES = new Set(["headline", "offer"]);
+const ACCENT_ROLES = new Set(["eyebrow", "date", "cta", "promo-code"]);
 
 const DENSITY: Record<string, { lineHeight: number; supportScale: number }> = {
   airy: { lineHeight: 1.5, supportScale: 0.94 },

@@ -19,6 +19,8 @@ export const COMPOSITION_ARCHETYPES = [
   "two-person-split",
   "three-speaker-row",
   "typographic-poster",
+  "offer-block-center",
+  "banded-poster",
 ] as const;
 
 export type CompositionArchetype = (typeof COMPOSITION_ARCHETYPES)[number];

@@ -39,6 +39,8 @@ const COLUMN_FRACTION: Record<CompositionArchetype, number> = {
   "two-person-split": 0.86,
   "three-speaker-row": 0.86,
   "typographic-poster": 0.86,
+  "offer-block-center": 0.86,
+  "banded-poster": 0.86,
 };
 
 /**
@@ -113,7 +115,15 @@ const pretty = (archetype: string): string =>
  * model's chosen concepts.
  */
 export function heuristicConcepts(input: HeuristicInput): DesignConceptPlan[] {
-  const direction = input.direction ?? resolveDirection(input.brief.styleDirection, input.brief.feeling);
+  const direction =
+    input.direction ??
+    resolveDirection({
+      id: input.brief.styleDirection,
+      feeling: input.brief.feeling,
+      occasion: `${input.brief.eventTitle} ${input.brief.offer} ${input.brief.extraLines.join(" ")}`,
+      businessType: input.brief.businessType,
+      category: input.brief.category,
+    });
   const count = input.count ?? 10;
   const rng = mulberry32(input.seed ?? hash(JSON.stringify(input.brief)));
 
@@ -132,7 +142,7 @@ export function heuristicConcepts(input: HeuristicInput): DesignConceptPlan[] {
     const ordered = [...direction.headlineFonts.slice(rotation), ...direction.headlineFonts.slice(0, rotation)];
     const headlineFont = chooseHeadlineFont(
       ordered,
-      input.brief.eventTitle,
+      extractOffer(input.brief).offer || input.brief.eventTitle,
       archetype,
       input.canvas,
       direction.typography.headlineCase === "uppercase",
@@ -246,6 +256,36 @@ function rationaleFor(direction: StyleDirection, archetype: CompositionArchetype
   ].join(" ");
 }
 
+const OFFER_LEAD =
+  /^(\s*(?:up to\s+)?(?:\d{1,3}\s*%\s*off|\$\d+(?:\.\d{2})?(?:\s*(?:off|each|only))?|bogo|buy\s+\w+\s+get\s+\w+|free\s+\w+|half\s+price|\d+\s+for\s+\d+))\b/i;
+
+/**
+ * Find the promotion in whatever field the customer typed it into. A small
+ * business writes "20% off all gel sets" wherever there is a box; the offer is
+ * the message, so it must never be left in a field the layout ignores.
+ */
+export function extractOffer(brief: DesignBrief): { offer: string; detail: string } {
+  if (brief.offer) return { offer: brief.offer, detail: brief.offerDetail };
+
+  const candidates = [brief.offerDetail, ...brief.extraLines, brief.callToAction].filter(
+    (line): line is string => Boolean(line && line.trim().length > 0),
+  );
+  for (const line of candidates) {
+    const match = OFFER_LEAD.exec(line);
+    if (!match) continue;
+    let lead = match[1]!.trim();
+    let rest = line.slice(match[0].length).replace(/^[\s,:–-]+/, "").trim();
+    // "Free brisket / sliders" reads as a mistake. A short trailing word belongs
+    // to the offer, not to a line of its own.
+    if (rest.length > 0 && !rest.includes(" ") && rest.length <= 10) {
+      lead = `${lead} ${rest}`;
+      rest = "";
+    }
+    return { offer: lead, detail: rest };
+  }
+  return { offer: "", detail: brief.offerDetail };
+}
+
 /** Content → slots. Nothing here is invented by a model (§33). */
 function slotsFor(
   brief: DesignBrief,
@@ -254,25 +294,54 @@ function slotsFor(
   archetype: CompositionArchetype,
 ): SlotPlan[] {
   const slots: SlotPlan[] = [];
-  const eyebrow = brief.seriesName || brief.organisationName;
   const person = brief.people[0];
+  const { offer, detail } = extractOffer(brief);
 
-  if (eyebrow) {
-    slots.push({ role: "eyebrow", text: eyebrow, emphasis: 0.35, styleKey: "eyebrow", colorRole: "accent" });
+  if (offer) {
+    // A promotion leads with the deal. The occasion is context, not the message.
+    const eyebrow = brief.eventTitle || brief.seriesName || brief.organisationName;
+    if (eyebrow) {
+      slots.push({ role: "eyebrow", text: eyebrow, emphasis: 0.4, styleKey: "eyebrow", colorRole: "accent" });
+    }
+    slots.push({ role: "offer", text: offer, emphasis: 0.98, styleKey: "offer", colorRole: "ink" });
+    if (detail) {
+      slots.push({ role: "offer-detail", text: detail, emphasis: 0.5, styleKey: "offer-detail", colorRole: "inkMuted" });
+    }
+    if (brief.eventTitle && eyebrow !== brief.organisationName && brief.organisationName) {
+      slots.push({
+        role: "subheadline",
+        text: brief.organisationName,
+        emphasis: 0.45,
+        styleKey: "subheadline",
+        colorRole: "inkMuted",
+      });
+    }
+    if (brief.promoCode) {
+      slots.push({ role: "promo-code", text: `CODE ${brief.promoCode}`, emphasis: 0.5, styleKey: "promo-code", colorRole: "accent" });
+    }
+  } else {
+    const eyebrow = brief.seriesName || brief.organisationName;
+    if (eyebrow) {
+      slots.push({ role: "eyebrow", text: eyebrow, emphasis: 0.35, styleKey: "eyebrow", colorRole: "accent" });
+    }
+    if (brief.eventTitle) {
+      slots.push({ role: "headline", text: brief.eventTitle, emphasis: 0.95, styleKey: "headline", colorRole: "ink" });
+    }
+    for (const line of brief.extraLines.slice(0, 2)) {
+      slots.push({ role: "body", text: line, emphasis: 0.4, styleKey: "body", colorRole: "inkMuted" });
+    }
   }
-  if (brief.eventTitle) {
-    slots.push({ role: "headline", text: brief.eventTitle, emphasis: 0.95, styleKey: "headline", colorRole: "ink" });
-  }
-  if (person?.name) {
+  const hasSubheadline = slots.some((s) => s.role === "subheadline");
+  if (person?.name && !hasSubheadline) {
     const label = person.title ? `${person.title} ${person.name}` : `with ${person.name}`;
     slots.push({ role: "subheadline", text: label, emphasis: 0.5, styleKey: "subheadline", colorRole: "inkMuted" });
-  } else if (brief.seriesName && brief.organisationName && eyebrow !== brief.organisationName) {
-    slots.push({ role: "subheadline", text: brief.organisationName, emphasis: 0.45, styleKey: "subheadline", colorRole: "inkMuted" });
   }
   if (brief.date) slots.push({ role: "date", text: brief.date, emphasis: 0.7, styleKey: "date", colorRole: "accent" });
   if (brief.time) slots.push({ role: "time", text: brief.time, emphasis: 0.5, styleKey: "time", colorRole: "ink" });
   if (brief.location) slots.push({ role: "location", text: brief.location, emphasis: 0.45, styleKey: "location", colorRole: "inkMuted" });
-  if (brief.callToAction) slots.push({ role: "cta", text: brief.callToAction, emphasis: 0.55, styleKey: "cta", colorRole: "accent" });
+  if (brief.callToAction && brief.callToAction !== offer && !brief.callToAction.startsWith(offer)) {
+    slots.push({ role: "cta", text: brief.callToAction, emphasis: 0.55, styleKey: "cta", colorRole: "accent" });
+  }
 
   const maxSubjects = archetype === "three-speaker-row" ? 3 : archetype === "two-person-split" ? 2 : 1;
   portraits.slice(0, maxSubjects).forEach((asset, index) => {

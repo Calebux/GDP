@@ -61,7 +61,15 @@ export async function generateConcepts(input: GenerateInput): Promise<GenerateRe
   const config = safeConfig();
   const candidateCount = input.candidateCount ?? config.candidates;
   const shown = input.conceptsShown ?? config.shown;
-  const direction = input.direction ?? resolveDirection(input.brief.styleDirection, input.brief.feeling);
+  const direction =
+    input.direction ??
+    resolveDirection({
+      id: input.brief.styleDirection,
+      feeling: input.brief.feeling,
+      occasion: `${input.brief.eventTitle} ${input.brief.offer} ${input.brief.extraLines.join(" ")}`,
+      businessType: input.brief.businessType,
+      category: input.brief.category,
+    });
   const summaries = summarise(input.assets);
 
   const planned = await planConcepts({

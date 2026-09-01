@@ -44,12 +44,26 @@ export interface ComposeResult {
 }
 
 /** Vertical order of the text hierarchy inside the stack. */
-const STACK_ORDER: SlotRole[] = ["eyebrow", "headline", "subheadline", "body"];
+const STACK_ORDER: SlotRole[] = [
+  "eyebrow",
+  "headline",
+  "offer",
+  "offer-detail",
+  "promo-code",
+  "subheadline",
+  "body",
+];
+
+/** Roles allowed to dominate the composition. A design has exactly one. */
+const DOMINANT_ROLES = new Set<SlotRole>(["headline", "offer"]);
 const DETAIL_ROLES: SlotRole[] = ["date", "time", "location"];
 
 const MAX_LINES: Partial<Record<SlotRole, number>> = {
   eyebrow: 1,
   headline: 3,
+  offer: 2,
+  "offer-detail": 2,
+  "promo-code": 1,
   subheadline: 2,
   body: 4,
   date: 1,
@@ -62,6 +76,9 @@ const MAX_LINES: Partial<Record<SlotRole, number>> = {
 const GAP_UNITS: Partial<Record<SlotRole, number>> = {
   eyebrow: 0,
   headline: 1.6,
+  offer: 1.5,
+  "offer-detail": 1.9,
+  "promo-code": 2.2,
   subheadline: 1.4,
   body: 2,
   details: 3,
@@ -257,9 +274,14 @@ export function composeDocument(input: ComposeInput): ComposeResult {
   }
 
   // ---- decorations ----
-  const headlineLayer = stackLayers.find((l) => l.slot === "headline");
-  const anchor: Rect = headlineLayer
-    ? { x: headlineLayer.x, y: headlineLayer.y, width: headlineLayer.width, height: headlineLayer.height }
+  // Anchor above the *first* line of the stack — anchoring on the headline puts
+  // the bar straight through an eyebrow sitting above it.
+  const stackTop = stackLayers.reduce<Layer | undefined>(
+    (top, layer) => (!top || layer.y < top.y ? layer : top),
+    undefined,
+  );
+  const anchor: Rect = stackTop
+    ? { x: stackTop.x, y: stackTop.y, width: stackTop.width, height: stackTop.height }
     : composedRegions.textStack;
   layers.push(
     ...buildDecorations(plan.decorations, canvas, palette, {
@@ -319,8 +341,10 @@ function requiredHeadlineWidth(
   canvas: Canvas,
   dominance: number,
 ): number {
-  const slot = plan.slots.find((s) => s.role === "headline");
-  const style = typeScale.headline;
+  const slot =
+    plan.slots.find((s) => s.role === "offer" && s.text) ??
+    plan.slots.find((s) => s.role === "headline");
+  const style = slot ? typeScale[slot.role] : undefined;
   if (!slot?.text || !style) return 0;
   const ideal = sizeFor(style, canvas) * (0.85 + slot.emphasis * 0.3) * (0.8 + dominance * 0.4);
   // 72% of the ideal size is the floor at which a headline still reads as one.
@@ -536,6 +560,25 @@ function buildTextStack(input: StackInput): Layer[] {
     blocks = build(scale);
   }
 
+  // With no photograph in the composition the type must carry the whole canvas.
+  // Grow the hierarchy as a unit until it genuinely fills its region.
+  if (regions.fillStack) {
+    for (let i = 0; i < 6; i += 1) {
+      const height = stackHeight(blocks);
+      if (height >= stack.height * 0.78 || scale >= 2.4) break;
+      const grown = Math.min(2.4, scale * Math.min(1.3, (stack.height * 0.86) / Math.max(1, height)));
+      if (grown <= scale * 1.01) break;
+      scale = grown;
+      blocks = build(scale);
+    }
+    // Growing can push a block onto an extra line — settle back if it overflows.
+    for (let i = 0; i < 4; i += 1) {
+      if (stackHeight(blocks) <= stack.height) break;
+      scale *= 0.94;
+      blocks = build(scale);
+    }
+  }
+
   const total = stackHeight(blocks);
   let cursorY =
     regions.stackAnchor === "top"
@@ -573,7 +616,7 @@ function buildTextStack(input: StackInput): Layer[] {
       y: px(cursorY),
       width: px(stack.width),
       align: regions.textAlign,
-      zIndex: input.headlineBehind && block.role === "headline" ? 4 : z++,
+      zIndex: input.headlineBehind && DOMINANT_ROLES.has(block.role) ? 4 : z++,
     };
     out.push(layer);
 
@@ -612,7 +655,7 @@ function makeBlock(b: BlockInput): Omit<Block, "gapBefore" | "inline"> | null {
   const canvas = b.input.canvas;
 
   const emphasisFactor = 0.85 + b.emphasis * 0.3;
-  const dominance = b.role === "headline" ? 0.8 + b.headlineDominance * 0.4 : 1;
+  const dominance = DOMINANT_ROLES.has(b.role) ? 0.8 + b.headlineDominance * 0.4 : 1;
   const size = Math.max(b.minSize, sizeFor(style, canvas) * b.scale * emphasisFactor * dominance);
 
   const layout = layoutText({
@@ -627,7 +670,7 @@ function makeBlock(b: BlockInput): Omit<Block, "gapBefore" | "inline"> | null {
     maxLines: MAX_LINES[b.role] ?? 3,
     transform: style.transform,
     fit: "shrink",
-    balance: b.role === "headline" || b.role === "subheadline",
+    balance: DOMINANT_ROLES.has(b.role) || b.role === "subheadline",
   });
 
   const color = resolveColor(b.input.palette, b.colorRole);

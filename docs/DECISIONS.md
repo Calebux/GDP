@@ -136,6 +136,53 @@ not a better one. Expansion order from §3 is unchanged.
 
 ---
 
+### D-17 — The beachhead is US small-business promotions, not churches
+**Status:** accepted (2026-09-01) — **supersedes D-07.**
+
+The customer is a small business owner with something to promote: a Valentine's
+offer, a grand opening, a Black Friday deal. The occasion changes; the need does
+not.
+
+**Why** D-01's per-pack model needs a buyer who returns for a *new occasion*, and
+US SMB promotions are the densest supply of those. §3's church argument was built
+around weekly recurring design volume, which per-pack pricing also serves — but
+the church vertical is a narrower wedge with a harder payment story in the US.
+
+**What it cost, concretely** — measured, not estimated:
+
+- **The offer was being dropped entirely.** A brief saying *"20% off all gel
+  sets"* produced a poster headlined "Valentine's Special" with no discount on
+  it anywhere. Church posters are *event-shaped* (title, date, time, venue);
+  promotions are *offer-shaped* (the deal is the headline, the occasion is the
+  eyebrow). Fixed by adding `offer`, `offer-detail` and `promo-code` slots at the
+  top of the hierarchy, plus extraction that finds the offer in whichever field
+  the customer typed it into.
+- **All twelve style directions were church-shaped.** A food truck was routed to
+  a youth-conference aesthetic. Added eight small-business directions and made
+  matching audience-, business-type- and occasion-aware.
+- **Every archetype assumed a photograph filled the lower half.** Most SMB briefs
+  arrive with a logo at best. Added two photo-less archetypes and a rule that
+  hands reserved photo space to the type when no photo arrives.
+
+**Consequence** The church directions stay in the catalogue behind
+`audience: "church"`. Nothing is deleted; the vertical is reachable again by
+changing one field.
+
+---
+
+### D-18 — VQS is calibrated against defects, not against willingness to pay
+**Status:** open problem (2026-09-01) — new.
+
+The scorer passed two designs at 98.6 and 91.7 while itself printing *"only 5% of
+the canvas carries content"*. It reliably catches broken output. It does not yet
+predict whether anyone would pay for the result.
+
+**Consequence** Until VQS correlates with human judgement, the quality gate is
+not yet the guarantee D-01 claims it is. Calibration against blind designer
+scoring is the gating task before any further engine tuning.
+
+---
+
 ## Engine architecture
 
 ### D-08 — The model never emits coordinates
