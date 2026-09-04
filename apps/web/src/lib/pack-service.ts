@@ -26,7 +26,10 @@ export function smartBriefToDesignBrief(brief: SmartBrief): DesignBrief {
   const subcategory = isChurch ? "sunday-service" : "promotion";
 
   const eventTitle = brief.eventName || brief.title || "Special Promotion";
-  const businessType = isChurch ? "" : brief.promotionType || "retail";
+  // businessType is what picks the visual direction. Fall back to
+  // promotionType for briefs written before the two were separated, where the
+  // business type was stored there.
+  const businessType = isChurch ? "" : brief.businessType || brief.promotionType || "retail";
 
   return DesignBrief.parse({
     category,

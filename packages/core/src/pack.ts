@@ -70,8 +70,38 @@ export const PACK_FORMATS: PackFormatItem[] = [
   },
 ];
 
+/**
+ * The three shapes the brief form asks about. Distinct from businessType:
+ * the category decides which questions to ask, the business type steers the
+ * design direction (see @gdp/design-dna directions).
+ */
+export const PROMOTION_CATEGORIES = [
+  { id: "promotion", label: "Business Promo" },
+  { id: "church", label: "Church & Ministry" },
+  { id: "event", label: "Event / Concert" },
+] as const;
+
+export type PromotionCategory = (typeof PROMOTION_CATEGORIES)[number]["id"];
+
+export const PROMOTION_CATEGORY_IDS = PROMOTION_CATEGORIES.map((c) => c.id) as PromotionCategory[];
+
+/** Business types the design directions know how to style. */
+export const BUSINESS_TYPES = [
+  "restaurant", "food-truck", "cafe", "bakery", "bar", "catering",
+  "retail", "boutique", "shop", "store", "grocery",
+  "nail-salon", "spa", "hair-salon", "lashes", "aesthetics", "barber",
+  "gym", "personal-trainer", "studio", "martial-arts", "yoga",
+] as const;
+
 export const SmartBrief = z.object({
   promotionType: z.string().default("promotion"),
+  /**
+   * Steers the design direction. Kept separate from promotionType, which the
+   * form uses to decide which questions to show — collapsing the two means a
+   * category picker with three options cannot represent "restaurant" and the
+   * design loses the signal that picks its visual direction.
+   */
+  businessType: z.string().max(80).default(""),
   title: z.string().max(120).default(""),
   description: z.string().max(500).default(""),
   objective: z.string().max(200).default(""),

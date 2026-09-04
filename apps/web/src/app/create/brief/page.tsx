@@ -4,7 +4,7 @@ import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { useBriefStore } from "@/lib/brief-store";
-import { PACK_FORMATS } from "@gdp/core";
+import { PACK_FORMATS, PROMOTION_CATEGORIES } from "@gdp/core";
 import type { FormatId } from "@gdp/design-schema";
 
 export default function SmartBriefPage() {
@@ -31,13 +31,59 @@ export default function SmartBriefPage() {
     CTA: brief.CTA || "Join Us",
     website: brief.website || "",
     socialHandles: brief.socialHandles || "",
+    businessType: brief.businessType || "",
     requestedFormats: (brief.requestedFormats.length > 0
       ? brief.requestedFormats
       : ["ig-portrait", "ig-square", "story", "facebook"]) as FormatId[],
     feeling: brief.feeling || "bold and modern",
   });
 
+  const [describeText, setDescribeText] = useState("");
+  const [describing, setDescribing] = useState(false);
+  const [describeError, setDescribeError] = useState("");
+  const [filledFields, setFilledFields] = useState<string[]>([]);
+  const [usedModel, setUsedModel] = useState(false);
+
   const isChurch = formData.promotionType === "church";
+
+  /**
+   * Fill the form from a free-text description. Only non-empty extracted
+   * values are applied, so this never blanks something the customer typed.
+   */
+  const handleDescribe = async () => {
+    if (!describeText.trim()) return;
+    setDescribing(true);
+    setDescribeError("");
+    setFilledFields([]);
+
+    try {
+      const res = await fetch("/api/brief/extract", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ text: describeText }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Could not read that description");
+
+      setUsedModel(Boolean(data.usedModel));
+      const applied: string[] = [];
+      setFormData((prev) => {
+        const next = { ...prev };
+        for (const [key, value] of Object.entries(data.brief as Record<string, string>)) {
+          if (typeof value === "string" && value.trim() && key in next) {
+            (next as Record<string, unknown>)[key] = value;
+            applied.push(key);
+          }
+        }
+        return next;
+      });
+      setFilledFields(applied);
+    } catch (err) {
+      setDescribeError(err instanceof Error ? err.message : "Something went wrong");
+    } finally {
+      setDescribing(false);
+    }
+  };
 
   const handleFormatToggle = (formatId: FormatId) => {
     setFormData((prev) => {
@@ -86,6 +132,50 @@ export default function SmartBriefPage() {
         </p>
       </div>
 
+      {/* Describe-it-in-your-own-words shortcut. The form stays the source of
+          truth — this only pre-fills it, and every value is editable after. */}
+      <div className="glass-panel p-5 mb-6 border-accent-border">
+        <label
+          htmlFor="describe-input"
+          className="text-xs font-bold text-muted uppercase tracking-wider block mb-2"
+        >
+          Or describe it in your own words
+          <span className="text-faint normal-case tracking-normal font-medium"> — we&apos;ll fill in what we can</span>
+        </label>
+        <textarea
+          id="describe-input"
+          rows={3}
+          value={describeText}
+          onChange={(e) => {
+            setDescribeText(e.target.value);
+            if (describeError) setDescribeError("");
+          }}
+          placeholder="e.g. Cafe Nord is doing bottomless mimosas for $15 at weekend brunch, 11am til 3pm every Saturday and Sunday at 104 Grand Ave"
+          className="input-field resize-y"
+        />
+        <div className="flex items-center justify-between gap-3 mt-3 flex-wrap">
+          <div className="text-xs min-h-[1rem]">
+            {describeError && <span className="text-negative font-medium">{describeError}</span>}
+            {!describeError && filledFields.length > 0 && (
+              <span className="text-positive font-medium">
+                Filled {filledFields.length} field{filledFields.length === 1 ? "" : "s"} — check them below
+                {!usedModel && (
+                  <span className="text-faint font-normal"> (keyword match; set ANTHROPIC_API_KEY for better results)</span>
+                )}
+              </span>
+            )}
+          </div>
+          <button
+            type="button"
+            onClick={handleDescribe}
+            disabled={describing || !describeText.trim()}
+            className="btn-secondary text-xs py-2 px-4 disabled:opacity-40 disabled:cursor-not-allowed"
+          >
+            {describing ? "Reading..." : "Fill the form"}
+          </button>
+        </div>
+      </div>
+
       <form onSubmit={handleReview} className="space-y-6">
         {/* Category selector */}
         <div className="glass-panel p-4">
@@ -93,11 +183,7 @@ export default function SmartBriefPage() {
             Promotion Category <span className="text-accent">&bull; REQUIRED</span>
           </label>
           <div className="grid grid-cols-3 gap-2">
-            {[
-              { id: "promotion", label: "Business Promo" },
-              { id: "church", label: "Church & Ministry" },
-              { id: "event", label: "Event / Concert" },
-            ].map((cat) => (
+            {PROMOTION_CATEGORIES.map((cat) => (
               <button
                 type="button"
                 key={cat.id}

@@ -3,9 +3,10 @@
 import { create } from "zustand";
 import { persist, createJSONStorage } from "zustand/middleware";
 import type { SmartBrief } from "@gdp/core";
+import { extractHeuristically } from "./brief-heuristics";
 
 export const DEFAULT_BRIEF: SmartBrief = {
-  promotionType: "event",
+  promotionType: "promotion",
   title: "",
   description: "",
   objective: "",
@@ -23,6 +24,7 @@ export const DEFAULT_BRIEF: SmartBrief = {
   phone: "",
   email: "",
   socialHandles: "",
+  businessType: "",
   brandColors: [],
   requestedFormats: ["ig-portrait", "ig-square", "story", "facebook"],
   additionalInstructions: "",
@@ -52,24 +54,18 @@ export const useBriefStore = create<BriefState>()(
 
       setInitialAnswer: (answer) =>
         set((state) => {
-          const lower = answer.toLowerCase();
-          let promoType = "promotion";
-          if (lower.includes("church") || lower.includes("service") || lower.includes("worship") || lower.includes("conference")) {
-            promoType = "church";
-          } else if (lower.includes("restaurant") || lower.includes("cafe") || lower.includes("food") || lower.includes("bar")) {
-            promoType = "restaurant";
-          } else if (lower.includes("product") || lower.includes("launch") || lower.includes("sale") || lower.includes("discount")) {
-            promoType = "promotion";
-          } else if (lower.includes("party") || lower.includes("night") || lower.includes("festival")) {
-            promoType = "event";
-          }
+          // Categories must stay within what the picker offers, or a REQUIRED
+          // field renders with nothing selected. The trade ("restaurant") goes
+          // to businessType, which is what steers the design direction.
+          const { promotionType, businessType } = extractHeuristically(answer);
 
           return {
             brief: {
               ...state.brief,
               title: answer,
               eventName: answer,
-              promotionType: promoType,
+              promotionType,
+              businessType: businessType || state.brief.businessType,
             },
             initialQuestionAnswered: true,
           };
