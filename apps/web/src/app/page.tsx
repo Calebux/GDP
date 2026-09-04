@@ -38,11 +38,11 @@ export default function EntryPage() {
       </div>
 
       {/* Main Question */}
-      <h1 className="text-4xl sm:text-5xl font-extrabold text-white tracking-tight leading-tight mb-4">
+      <h1 className="text-4xl sm:text-5xl font-extrabold text-ink tracking-tight leading-tight mb-4">
         What are you promoting?
       </h1>
 
-      <p className="text-base sm:text-lg text-zinc-400 max-w-lg mx-auto mb-8 font-normal">
+      <p className="text-base sm:text-lg text-muted max-w-lg mx-auto mb-8 font-normal">
         Answer in your own words. The engine will compose three complete, ready-to-use promo concepts for your campaign.
       </p>
 
@@ -58,13 +58,13 @@ export default function EntryPage() {
               if (error) setError("");
             }}
             placeholder="e.g. A church conference, restaurant opening, product launch..."
-            className="input-field text-lg py-4 px-5 text-white placeholder-zinc-500 shadow-2xl focus:scale-[1.01]"
+            className="input-field text-lg py-4 px-5 text-ink placeholder-faint shadow-2xl focus:scale-[1.01]"
             autoFocus
           />
         </div>
 
         {error && (
-          <p className="text-red-400 text-sm font-medium text-left px-1">
+          <p className="text-negative text-sm font-medium text-left px-1">
             {error}
           </p>
         )}
@@ -93,7 +93,7 @@ export default function EntryPage() {
 
       {/* Fast suggestions */}
       <div className="mt-8 text-left w-full">
-        <p className="text-xs uppercase tracking-wider text-zinc-500 font-semibold mb-3">
+        <p className="text-xs uppercase tracking-wider text-faint font-semibold mb-3">
           Popular examples to try:
         </p>
         <div className="flex flex-wrap gap-2">
@@ -105,7 +105,7 @@ export default function EntryPage() {
                 setInput(s);
                 setError("");
               }}
-              className="text-xs text-zinc-400 hover:text-white bg-white/[0.04] hover:bg-white/[0.08] border border-white/5 rounded-full px-3.5 py-2 transition-colors cursor-pointer"
+              className="text-xs text-muted hover:text-ink bg-fill hover:bg-fill-strong border border-line rounded-full px-3.5 py-2 transition-colors cursor-pointer"
             >
               &ldquo;{s}&rdquo;
             </button>

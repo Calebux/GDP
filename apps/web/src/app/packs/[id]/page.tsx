@@ -148,14 +148,14 @@ export default function PackPage({ params }: { params: Promise<{ id: string }> }
   if (loading) {
     return (
       <div className="flex flex-col items-center justify-center min-h-[60vh] text-center">
-        <div className="w-16 h-16 rounded-2xl bg-amber-500/10 border border-amber-500/30 flex items-center justify-center mb-6 animate-pulse">
-          <svg className="w-8 h-8 text-amber-400 animate-spin" fill="none" viewBox="0 0 24 24">
+        <div className="w-16 h-16 rounded-2xl bg-accent-surface border border-accent-border flex items-center justify-center mb-6 animate-pulse">
+          <svg className="w-8 h-8 text-accent animate-spin" fill="none" viewBox="0 0 24 24">
             <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
             <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z"></path>
           </svg>
         </div>
-        <h2 className="text-2xl font-bold text-white mb-2">Creating your concepts...</h2>
-        <p className="text-zinc-400 text-sm max-w-md">
+        <h2 className="text-2xl font-bold text-ink mb-2">Creating your concepts...</h2>
+        <p className="text-muted text-sm max-w-md">
           Applying 12 layout archetypes, balancing optical typography, and solving geometry with deterministic quality gates.
         </p>
       </div>
@@ -165,11 +165,11 @@ export default function PackPage({ params }: { params: Promise<{ id: string }> }
   if (error || !pack) {
     return (
       <div className="max-w-md mx-auto my-12 glass-panel p-8 text-center">
-        <div className="w-12 h-12 rounded-full bg-red-500/20 text-red-400 flex items-center justify-center mx-auto mb-4">
+        <div className="w-12 h-12 rounded-full bg-negative-surface text-negative flex items-center justify-center mx-auto mb-4">
           ✗
         </div>
-        <h2 className="text-xl font-bold text-white mb-2">Error</h2>
-        <p className="text-sm text-zinc-400 mb-6">{error || "Pack not found"}</p>
+        <h2 className="text-xl font-bold text-ink mb-2">Error</h2>
+        <p className="text-sm text-muted mb-6">{error || "Pack not found"}</p>
         <Link href="/" className="btn-secondary text-xs">
           Start New Promo
         </Link>
@@ -183,20 +183,20 @@ export default function PackPage({ params }: { params: Promise<{ id: string }> }
   return (
     <div className="pb-16 max-w-5xl mx-auto">
       {/* Title & Info Header */}
-      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 border-b border-white/5 pb-6 mb-8">
+      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 border-b border-line pb-6 mb-8">
         <div>
           <div className="flex items-center gap-2 mb-2">
             <span className="pulse-badge text-[10px]">
               {pack.brief.promotionType || "Promo Pack"}
             </span>
-            <span className="text-xs text-zinc-400">&bull; 3 Concepts Composed</span>
+            <span className="text-xs text-muted">&bull; 3 Concepts Composed</span>
             {isPaid && (
-              <span className="bg-emerald-500/10 text-emerald-400 border border-emerald-500/30 text-[10px] font-bold px-2 py-0.5 rounded-full">
+              <span className="bg-positive-surface text-positive border border-positive-border text-[10px] font-bold px-2 py-0.5 rounded-full">
                 ✓ UNLOCKED
               </span>
             )}
           </div>
-          <h1 className="text-2xl sm:text-3xl font-extrabold text-white tracking-tight">
+          <h1 className="text-2xl sm:text-3xl font-extrabold text-ink tracking-tight">
             {pack.brief.eventName || pack.brief.title || "Your Promo Campaign"}
           </h1>
         </div>
@@ -215,8 +215,8 @@ export default function PackPage({ params }: { params: Promise<{ id: string }> }
             </a>
           ) : (
             <div className="text-right">
-              <span className="text-[11px] text-zinc-400 uppercase tracking-wider block font-semibold">Free Watermarked Preview</span>
-              <span className="text-xs text-amber-400 font-medium">Select a concept to unlock full pack</span>
+              <span className="text-[11px] text-muted uppercase tracking-wider block font-semibold">Free Watermarked Preview</span>
+              <span className="text-xs text-accent font-medium">Select a concept to unlock full pack</span>
             </div>
           )}
         </div>
@@ -224,22 +224,22 @@ export default function PackPage({ params }: { params: Promise<{ id: string }> }
 
       {/* STATE 8 & 9: PAYMENT PROCESSING OR PACKAGING */}
       {paymentProcessing && (
-        <div className="glass-panel-elevated p-6 mb-8 border-amber-500/30 text-center animate-pulse">
-          <div className="text-amber-400 font-bold mb-1">Verifying Payment...</div>
-          <p className="text-xs text-zinc-400">Confirming your transaction and preparing download credentials.</p>
+        <div className="glass-panel-elevated p-6 mb-8 border-accent-border text-center animate-pulse">
+          <div className="text-accent font-bold mb-1">Verifying Payment...</div>
+          <p className="text-xs text-muted">Confirming your transaction and preparing download credentials.</p>
         </div>
       )}
 
       {pack.status === "packaging" && (
-        <div className="glass-panel-elevated p-6 mb-8 border-amber-500/30 text-center">
-          <div className="flex items-center justify-center gap-2 text-amber-400 font-bold mb-2">
-            <svg className="animate-spin h-5 w-5 text-amber-400" fill="none" viewBox="0 0 24 24">
+        <div className="glass-panel-elevated p-6 mb-8 border-accent-border text-center">
+          <div className="flex items-center justify-center gap-2 text-accent font-bold mb-2">
+            <svg className="animate-spin h-5 w-5 text-accent" fill="none" viewBox="0 0 24 24">
               <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
               <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z"></path>
             </svg>
             Preparing your design pack...
           </div>
-          <p className="text-xs text-zinc-400 max-w-md mx-auto">
+          <p className="text-xs text-muted max-w-md mx-auto">
             Recomposing approved design across all requested dimensions with unwatermarked full-resolution assets and manifest.json.
           </p>
         </div>
@@ -247,15 +247,15 @@ export default function PackPage({ params }: { params: Promise<{ id: string }> }
 
       {/* STATE 10: READY FOR DOWNLOAD */}
       {isPackaged && (
-        <div className="glass-panel-elevated p-6 mb-10 border-emerald-500/30 bg-emerald-950/20">
+        <div className="glass-panel-elevated p-6 mb-10 border-positive-border bg-emerald-950/20">
           <div className="flex flex-col sm:flex-row items-center justify-between gap-4">
             <div className="flex items-center gap-4">
-              <div className="w-12 h-12 rounded-xl bg-emerald-500/20 text-emerald-400 flex items-center justify-center text-xl font-bold">
+              <div className="w-12 h-12 rounded-xl bg-positive-surface text-positive flex items-center justify-center text-xl font-bold">
                 ✓
               </div>
               <div>
-                <h3 className="text-lg font-bold text-white">Your design pack is ready!</h3>
-                <p className="text-xs text-zinc-400">
+                <h3 className="text-lg font-bold text-ink">Your design pack is ready!</h3>
+                <p className="text-xs text-muted">
                   Full-resolution, unwatermarked files across all formats + manifest.json
                 </p>
               </div>
@@ -268,11 +268,11 @@ export default function PackPage({ params }: { params: Promise<{ id: string }> }
             </a>
           </div>
 
-          <div className="mt-6 pt-4 border-t border-white/5 flex flex-wrap gap-2 text-xs">
+          <div className="mt-6 pt-4 border-t border-line flex flex-wrap gap-2 text-xs">
             {selectedFormats.map((fId) => {
               const info = PACK_FORMATS.find((pf) => pf.id === fId);
               return (
-                <span key={fId} className="bg-white/5 px-2.5 py-1 rounded text-zinc-300 font-mono text-[11px]">
+                <span key={fId} className="bg-fill px-2.5 py-1 rounded text-ink-soft font-mono text-[11px]">
                   {info?.name || fId} ({info?.width}&times;{info?.height})
                 </span>
               );
@@ -284,11 +284,11 @@ export default function PackPage({ params }: { params: Promise<{ id: string }> }
       {/* STATE 5: CONCEPTS (3 CARDS SIDE-BY-SIDE) */}
       <div className="mb-12">
         <div className="flex items-center justify-between mb-4">
-          <h2 className="text-lg font-bold text-white flex items-center gap-2">
+          <h2 className="text-lg font-bold text-ink flex items-center gap-2">
             <span>Choose Your Design Concept</span>
-            <span className="text-xs text-zinc-400 font-normal">(Free Watermarked Previews)</span>
+            <span className="text-xs text-muted font-normal">(Free Watermarked Previews)</span>
           </h2>
-          <span className="text-xs text-zinc-400">
+          <span className="text-xs text-muted">
             Click any concept to inspect and unlock
           </span>
         </div>
@@ -302,22 +302,22 @@ export default function PackPage({ params }: { params: Promise<{ id: string }> }
                 onClick={() => handleSelectConcept(concept)}
                 className={`glass-panel p-4 rounded-2xl flex flex-col transition-all cursor-pointer relative group ${
                   isSelected
-                    ? "border-amber-400 ring-2 ring-amber-400/20 bg-white/[0.04]"
-                    : "hover:border-white/20 hover:bg-white/[0.02]"
+                    ? "border-accent ring-2 ring-amber-400/20 bg-fill"
+                    : "hover:border-line-strong hover:bg-fill-soft"
                 }`}
               >
                 {/* Concept index & score */}
                 <div className="flex items-center justify-between mb-3">
-                  <span className="text-xs font-bold text-zinc-300 uppercase tracking-wider">
+                  <span className="text-xs font-bold text-ink-soft uppercase tracking-wider">
                     Concept 0{idx + 1}
                   </span>
-                  <span className="text-[10px] font-bold text-emerald-400 bg-emerald-500/10 px-2 py-0.5 rounded border border-emerald-500/20">
+                  <span className="text-[10px] font-bold text-positive bg-positive-surface px-2 py-0.5 rounded border border-positive-border">
                     VQS {concept.vqs}
                   </span>
                 </div>
 
                 {/* Preview Image with non-bypassable server watermark */}
-                <div className="relative aspect-[4/5] rounded-xl overflow-hidden bg-black/50 border border-white/5 mb-4 group-hover:scale-[1.01] transition-transform">
+                <div className="relative aspect-[4/5] rounded-xl overflow-hidden bg-fill border border-line mb-4 group-hover:scale-[1.01] transition-transform">
                   <Image
                     src={concept.previewUrl}
                     alt={concept.title}
@@ -326,7 +326,7 @@ export default function PackPage({ params }: { params: Promise<{ id: string }> }
                     className="object-cover"
                     unoptimized
                   />
-                  <div className="absolute top-2 right-2 bg-black/70 backdrop-blur-md px-2 py-0.5 rounded text-[10px] text-zinc-400 border border-white/10">
+                  <div className="absolute top-2 right-2 bg-black/70 backdrop-blur-md px-2 py-0.5 rounded text-[10px] text-zinc-300 border border-white/15">
                     Watermarked
                   </div>
                 </div>
@@ -334,9 +334,9 @@ export default function PackPage({ params }: { params: Promise<{ id: string }> }
                 {/* Concept Info */}
                 <div className="flex-1 flex flex-col justify-between">
                   <div>
-                    <h3 className="font-bold text-sm text-white mb-1">{concept.title}</h3>
-                    <p className="text-xs text-zinc-400 mb-2 line-clamp-2">{concept.description}</p>
-                    <span className="inline-block text-[10px] bg-white/5 text-zinc-400 px-2 py-0.5 rounded font-mono">
+                    <h3 className="font-bold text-sm text-ink mb-1">{concept.title}</h3>
+                    <p className="text-xs text-muted mb-2 line-clamp-2">{concept.description}</p>
+                    <span className="inline-block text-[10px] bg-fill text-muted px-2 py-0.5 rounded font-mono">
                       Direction: {concept.visualDirection}
                     </span>
                   </div>
@@ -346,7 +346,7 @@ export default function PackPage({ params }: { params: Promise<{ id: string }> }
                     className={`w-full mt-4 py-2.5 rounded-xl text-xs font-bold transition-colors ${
                       isSelected
                         ? "bg-amber-400 text-black"
-                        : "bg-white/10 text-white hover:bg-white/20"
+                        : "bg-fill-strong text-ink hover:bg-fill-strong"
                     }`}
                   >
                     {isSelected ? "✓ Selected" : "Select Concept"}
@@ -360,11 +360,11 @@ export default function PackPage({ params }: { params: Promise<{ id: string }> }
 
       {/* STATE 6 & 7: SELECTED CONCEPT & PAYWALL */}
       {selectedConcept && !isPaid && (
-        <div className="glass-panel-elevated p-6 sm:p-8 rounded-3xl border-amber-500/30 mb-12">
+        <div className="glass-panel-elevated p-6 sm:p-8 rounded-3xl border-accent-border mb-12">
           <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-center">
             {/* Left: Preview */}
             <div className="lg:col-span-5">
-              <div className="relative aspect-[4/5] rounded-2xl overflow-hidden bg-black border border-white/10 shadow-2xl">
+              <div className="relative aspect-[4/5] rounded-2xl overflow-hidden bg-fill border border-line-strong shadow-2xl">
                 <Image
                   src={selectedConcept.previewUrl}
                   alt={selectedConcept.title}
@@ -373,7 +373,7 @@ export default function PackPage({ params }: { params: Promise<{ id: string }> }
                   className="object-cover"
                   unoptimized
                 />
-                <div className="absolute bottom-3 left-3 right-3 bg-black/80 backdrop-blur-md p-2 rounded-xl text-center text-xs text-zinc-300 border border-white/10">
+                <div className="absolute bottom-3 left-3 right-3 bg-black/80 backdrop-blur-md p-2 rounded-xl text-center text-xs text-zinc-200 border border-white/15">
                   Preview Quality &bull; Watermark removed on unlock
                 </div>
               </div>
@@ -383,17 +383,17 @@ export default function PackPage({ params }: { params: Promise<{ id: string }> }
             <div className="lg:col-span-7 space-y-6">
               <div>
                 <span className="pulse-badge text-[10px] mb-2">D-03 Paywall &bull; Ready to Export</span>
-                <h2 className="text-2xl sm:text-3xl font-extrabold text-white tracking-tight">
+                <h2 className="text-2xl sm:text-3xl font-extrabold text-ink tracking-tight">
                   Unlock Your Complete Promo Pack
                 </h2>
-                <p className="text-sm text-zinc-400 mt-1">
-                  You selected <strong className="text-white">{selectedConcept.title}</strong>. One small fee unlocks all unwatermarked, 300 DPI &amp; web-optimized formats.
+                <p className="text-sm text-muted mt-1">
+                  You selected <strong className="text-ink">{selectedConcept.title}</strong>. One small fee unlocks all unwatermarked, 300 DPI &amp; web-optimized formats.
                 </p>
               </div>
 
               {/* Formats Checklist */}
               <div>
-                <span className="text-xs uppercase tracking-wider text-zinc-400 font-bold block mb-3">
+                <span className="text-xs uppercase tracking-wider text-muted font-bold block mb-3">
                   Formats Generated in Your Pack:
                 </span>
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
@@ -405,15 +405,15 @@ export default function PackPage({ params }: { params: Promise<{ id: string }> }
                         onClick={() => toggleFormat(f.id as FormatId)}
                         className={`flex items-center gap-2 p-2.5 rounded-lg border text-xs cursor-pointer select-none transition-colors ${
                           active
-                            ? "bg-amber-500/10 border-amber-500/30 text-white"
-                            : "bg-white/[0.02] border-white/5 text-zinc-400 hover:bg-white/5"
+                            ? "bg-accent-surface border-accent-border text-ink"
+                            : "bg-fill-soft border-line text-muted hover:bg-fill"
                         }`}
                       >
-                        <span className={`text-xs ${active ? "text-amber-400 font-bold" : "text-zinc-600"}`}>
+                        <span className={`text-xs ${active ? "text-accent font-bold" : "text-faint"}`}>
                           {active ? "✓" : "+"}
                         </span>
                         <span className="font-semibold">{f.name}</span>
-                        <span className="text-[10px] text-zinc-400 font-mono ml-auto">
+                        <span className="text-[10px] text-muted font-mono ml-auto">
                           {f.width}&times;{f.height}
                         </span>
                       </div>
@@ -423,16 +423,16 @@ export default function PackPage({ params }: { params: Promise<{ id: string }> }
               </div>
 
               {/* Price & CTA */}
-              <div className="pt-4 border-t border-white/5 flex flex-col sm:flex-row items-center justify-between gap-4">
+              <div className="pt-4 border-t border-line flex flex-col sm:flex-row items-center justify-between gap-4">
                 <div>
                   <div className="flex items-baseline gap-2">
-                    <span className="text-3xl font-black text-white">$2.99</span>
-                    <span className="text-xs text-zinc-400 line-through">$19.00</span>
-                    <span className="text-[10px] text-emerald-400 font-bold bg-emerald-500/10 px-1.5 py-0.5 rounded">
+                    <span className="text-3xl font-black text-ink">$2.99</span>
+                    <span className="text-xs text-muted line-through">$19.00</span>
+                    <span className="text-[10px] text-positive font-bold bg-positive-surface px-1.5 py-0.5 rounded">
                       SINGLE PACK FEE
                     </span>
                   </div>
-                  <p className="text-[11px] text-zinc-400 mt-0.5">
+                  <p className="text-[11px] text-muted mt-0.5">
                     No subscriptions. Lifetime unwatermarked commercial license.
                   </p>
                 </div>
