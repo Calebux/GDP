@@ -259,8 +259,14 @@ export class PackRepository {
   }
 
   async getOrderByPackId(packId: string): Promise<PackOrder | null> {
-    for (const ord of memoryOrders.values()) {
-      if (ord.packId === packId) return ord;
+    // A paid order wins; otherwise the newest. Returning whichever happens to
+    // sit first would let a stale pending order mask a completed payment and
+    // lock a paying customer out of their own pack.
+    const candidates = Array.from(memoryOrders.values()).filter((o) => o.packId === packId);
+    if (candidates.length > 0) {
+      const paid = candidates.filter((o) => o.status === "paid");
+      const pool = paid.length > 0 ? paid : candidates;
+      return pool.reduce((newest, o) => (o.createdAt > newest.createdAt ? o : newest));
     }
 
     if (await dbAvailable()) {
@@ -271,8 +277,8 @@ export class PackRepository {
           .from(orders)
           .where(eq(orders.packId, packId))
           .orderBy(desc(orders.createdAt))
-          .limit(1);
-        const r = rows[0];
+          .limit(20);
+        const r = rows.find((row) => row.status === "paid") ?? rows[0];
         if (!r) return null;
         return {
           id: r.id,
@@ -348,6 +354,9 @@ export class PackRepository {
           .update(orders)
           .set({
             status: updated.status,
+            // createCheckout writes the session id through this method; without
+            // it the row keeps "" and getOrderByProviderSessionId never matches.
+            providerSessionId: updated.providerSessionId,
             updatedAt: new Date(updated.updatedAt),
           })
           .where(eq(orders.id, id));

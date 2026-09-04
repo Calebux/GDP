@@ -55,8 +55,15 @@ class FsStorage implements Storage {
   ) {}
 
   private pathFor(key: string): string {
-    const safe = key.replace(/\.\./g, "").replace(/^\/+/, "");
-    return path.join(path.resolve(this.root), safe);
+    // Resolve, then prove the result is still inside the root. Stripping ".."
+    // instead would silently *rewrite* "../protected/x" into "protected/x" —
+    // turning a traversal attempt into a successful read of a protected key.
+    const root = path.resolve(this.root);
+    const resolved = path.resolve(root, key.replace(/^\/+/, ""));
+    if (resolved !== root && !resolved.startsWith(root + path.sep)) {
+      throw new Error(`Refusing to access a key outside the storage root: ${key}`);
+    }
+    return resolved;
   }
 
   async put(input: PutInput): Promise<PutResult> {

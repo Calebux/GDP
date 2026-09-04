@@ -16,7 +16,18 @@ export interface VerificationResult {
   amount: number;
   currency: string;
   sessionId: string;
+  /** Pack the provider says this session was opened for — callers MUST check it. */
+  packId?: string;
+  /** Order the provider says this session was opened for. */
+  orderId?: string;
 }
+
+/**
+ * Signature the dev provider accepts on /api/webhooks/payment. It is a fixed
+ * string on purpose: the dev provider is unreachable outside development
+ * (see getPaymentProvider), so there is nothing here worth protecting.
+ */
+export const DEV_WEBHOOK_SIGNATURE = "dev_signature_valid";
 
 export interface WebhookResult {
   handled: boolean;
@@ -89,6 +100,8 @@ export class StripePaymentProvider implements PaymentProvider {
         amount: session.amount_total ?? 0,
         currency: session.currency ?? "usd",
         sessionId,
+        packId: session.metadata?.packId ?? session.client_reference_id ?? undefined,
+        orderId: session.metadata?.orderId ?? undefined,
       };
     } catch (err) {
       log.error("Stripe verifyPayment error", { error: String(err), sessionId });
@@ -130,14 +143,14 @@ export class StripePaymentProvider implements PaymentProvider {
 
 /** Dev / Local Test payment provider (zero external dependency per D-16) */
 export class DevPaymentProvider implements PaymentProvider {
-  private sessions = new Map<string, { order: PackOrder; paid: boolean }>();
+  private sessions = new Map<string, { packId: string; order: PackOrder; paid: boolean }>();
 
   async createCheckoutSession(pack: Pack, order: PackOrder): Promise<CheckoutSessionResult> {
     const e = env();
     const appUrl = e.APP_URL.replace(/\/$/, "");
     const sessionId = `dev_sess_${newId("pay")}`;
 
-    this.sessions.set(sessionId, { order, paid: false });
+    this.sessions.set(sessionId, { packId: pack.id, order, paid: false });
 
     return {
       sessionId,
@@ -147,18 +160,10 @@ export class DevPaymentProvider implements PaymentProvider {
   }
 
   async verifyPayment(sessionId: string): Promise<VerificationResult> {
+    // Only a session this provider actually issued can be verified. An id that
+    // merely *looks* like one is an unpaid session, not a paid one.
     const record = this.sessions.get(sessionId);
     if (!record) {
-      // allow instant verification if session has prefix dev_sess_
-      if (sessionId.startsWith("dev_sess_")) {
-        return {
-          paid: true,
-          status: "paid",
-          amount: 299,
-          currency: "usd",
-          sessionId,
-        };
-      }
       return {
         paid: false,
         status: "failed",
@@ -168,7 +173,8 @@ export class DevPaymentProvider implements PaymentProvider {
       };
     }
 
-    // In dev mode, verify marks it as paid
+    // Standing in for the hosted checkout page: reaching verification means the
+    // simulated customer completed it.
     record.paid = true;
     return {
       paid: true,
@@ -176,13 +182,15 @@ export class DevPaymentProvider implements PaymentProvider {
       amount: record.order.amount,
       currency: record.order.currency,
       sessionId,
+      packId: record.packId,
+      orderId: record.order.id,
     };
   }
 
   async handleWebhook(body: Buffer | string, signature: string): Promise<WebhookResult> {
     try {
       const payload = typeof body === "string" ? JSON.parse(body) : JSON.parse(body.toString("utf8"));
-      if (signature !== "dev_signature_valid" && signature !== "test-signature") {
+      if (signature !== DEV_WEBHOOK_SIGNATURE) {
         return { handled: false, error: "Invalid dev webhook signature" };
       }
 
@@ -198,10 +206,42 @@ export class DevPaymentProvider implements PaymentProvider {
   }
 }
 
+let providerInstance: PaymentProvider | null = null;
+
+/**
+ * The provider is a singleton: DevPaymentProvider holds issued sessions in
+ * memory, so handing out a fresh instance per call would lose every session and
+ * make verification meaningless.
+ *
+ * Falling back to the dev provider is a *development* affordance (D-16). In
+ * production a missing or misconfigured Stripe key must fail loudly — degrading
+ * to a provider that approves payments would give the whole catalogue away.
+ */
 export function getPaymentProvider(): PaymentProvider {
+  if (providerInstance) return providerInstance;
+
   const e = env();
   if (e.PAYMENT_PROVIDER === "stripe" && e.STRIPE_SECRET_KEY) {
-    return new StripePaymentProvider(e.STRIPE_SECRET_KEY, e.STRIPE_WEBHOOK_SECRET);
+    providerInstance = new StripePaymentProvider(e.STRIPE_SECRET_KEY, e.STRIPE_WEBHOOK_SECRET);
+    return providerInstance;
   }
-  return new DevPaymentProvider();
+
+  if (e.NODE_ENV === "production") {
+    throw new Error(
+      "Refusing to start the dev payment provider in production: set PAYMENT_PROVIDER=stripe " +
+        "and STRIPE_SECRET_KEY, or the paywall approves every payment.",
+    );
+  }
+
+  log.warn("using the dev payment provider — payments are simulated", {
+    paymentProvider: e.PAYMENT_PROVIDER,
+    hasStripeKey: Boolean(e.STRIPE_SECRET_KEY),
+  });
+  providerInstance = new DevPaymentProvider();
+  return providerInstance;
+}
+
+/** Test seam — drops the memoised provider so env changes take effect. */
+export function resetPaymentProvider(): void {
+  providerInstance = null;
 }

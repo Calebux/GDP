@@ -175,8 +175,17 @@ export class PackService {
     if (!pack.selectedConceptId) throw new Error(`Please select a concept before checkout`);
 
     const e = env();
-    const orderId = newId("ord");
-    const order: PackOrder = {
+
+    // Reuse the pack's open order rather than minting a new one per click. With
+    // two orders on one pack the customer can pay against the one the download
+    // check does not look at, and the pack stays locked after a real payment.
+    const existing = await packRepository.getOrderByPackId(packId);
+    if (existing?.status === "paid") {
+      throw new Error(`Pack ${packId} is already paid`);
+    }
+
+    const orderId = existing?.id ?? newId("ord");
+    const order: PackOrder = existing ?? {
       id: orderId,
       packId,
       amount: e.PACK_PRICE_CENTS,
@@ -188,7 +197,7 @@ export class PackService {
       updatedAt: new Date().toISOString(),
     };
 
-    await packRepository.saveOrder(order);
+    if (!existing) await packRepository.saveOrder(order);
 
     const provider = getPaymentProvider();
     const session = await provider.createCheckoutSession(pack, order);
@@ -205,28 +214,23 @@ export class PackService {
     const pack = await packRepository.getPack(packId);
     if (!pack) throw new Error(`Pack ${packId} not found`);
 
-    let order = sessionId
+    const order = sessionId
       ? await packRepository.getOrderByProviderSessionId(sessionId)
       : await packRepository.getOrderByPackId(packId);
 
     if (!order) {
-      // If sessionId was provided and looks like a dev session, create/match order
-      if (sessionId && sessionId.startsWith("dev_sess_")) {
-        order = {
-          id: newId("ord"),
-          packId,
-          amount: env().PACK_PRICE_CENTS,
-          currency: "usd",
-          provider: "dev",
-          providerSessionId: sessionId,
-          status: "pending",
-          createdAt: new Date().toISOString(),
-          updatedAt: new Date().toISOString(),
-        };
-        await packRepository.saveOrder(order);
-      } else {
-        throw new Error(`No active order found for pack ${packId}`);
-      }
+      throw new Error(`No active order found for pack ${packId}`);
+    }
+
+    // The session id arrives in a URL the customer controls. An order that
+    // belongs to a different pack proves nothing about this one.
+    if (order.packId !== packId) {
+      log.warn("Rejected payment verification for a mismatched pack", {
+        packId,
+        orderId: order.id,
+        orderPackId: order.packId,
+      });
+      throw new Error(`Session does not belong to pack ${packId}`);
     }
 
     if (order.status === "paid" && pack.status === "packaged") {
@@ -236,16 +240,37 @@ export class PackService {
     const provider = getPaymentProvider();
     const verification = await provider.verifyPayment(order.providerSessionId || sessionId || "");
 
-    if (verification.paid) {
-      await packRepository.updateOrder(order.id, { status: "paid" });
-      await packRepository.updatePack(packId, { status: "paid" });
-
-      // Trigger high-resolution multi-format packaging
-      const packagedPack = await packagingService.packagePack(packId);
-      return { paid: true, pack: packagedPack };
+    if (!verification.paid) {
+      return { paid: false, pack };
     }
 
-    return { paid: false, pack };
+    // Same check again, this time against what the payment provider itself says
+    // the session was opened for — the local order row is not the authority.
+    if (verification.packId && verification.packId !== packId) {
+      log.warn("Provider reported a different pack for this session", {
+        packId,
+        reportedPackId: verification.packId,
+        orderId: order.id,
+      });
+      throw new Error(`Session does not belong to pack ${packId}`);
+    }
+
+    if (verification.amount < order.amount) {
+      log.warn("Payment is short of the order amount", {
+        packId,
+        orderId: order.id,
+        expected: order.amount,
+        received: verification.amount,
+      });
+      throw new Error(`Payment for pack ${packId} is short of the order amount`);
+    }
+
+    await packRepository.updateOrder(order.id, { status: "paid" });
+    await packRepository.updatePack(packId, { status: "paid" });
+
+    // Trigger high-resolution multi-format packaging
+    const packagedPack = await packagingService.packagePack(packId);
+    return { paid: true, pack: packagedPack };
   }
 }
 
