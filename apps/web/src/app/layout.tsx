@@ -1,6 +1,5 @@
 import type { Metadata } from "next";
 import Link from "next/link";
-import { ThemeToggle } from "../components/theme-toggle";
 import "./globals.css";
 
 export const metadata: Metadata = {
@@ -14,16 +13,8 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="en" suppressHydrationWarning>
+    <html lang="en">
       <body className="antialiased min-h-screen flex flex-col selection:bg-amber-500 selection:text-black">
-        {/* Applies a stored theme before hydration so an explicit choice never
-            flashes the other theme first. Runs from the SSR'd HTML on initial
-            load; client navigations keep the same document. */}
-        <script
-          dangerouslySetInnerHTML={{
-            __html: `try{var t=localStorage.getItem("gdp-theme");if(t==="light"||t==="dark")document.documentElement.dataset.theme=t}catch(e){}`,
-          }}
-        />
         {/* Navigation header */}
         <header className="sticky top-0 z-40 border-b border-line bg-header backdrop-blur-xl">
           <div className="max-w-5xl mx-auto px-4 sm:px-6 h-16 flex items-center justify-between">
@@ -52,7 +43,6 @@ export default function RootLayout({
               >
                 New Promo
               </Link>
-              <ThemeToggle />
             </div>
           </div>
         </header>
