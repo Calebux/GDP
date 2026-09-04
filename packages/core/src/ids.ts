@@ -1,5 +1,3 @@
-import { randomUUID } from "node:crypto";
-
 /** Prefixed, sortable-enough ids. Prefixes make logs and design JSON readable. */
 export type IdPrefix =
   | "proj"
@@ -12,7 +10,10 @@ export type IdPrefix =
   | "usr"
   | "org"
   | "layer"
-  | "job";
+  | "job"
+  | "pack"
+  | "pay"
+  | "ord";
 
 const ALPHABET = "0123456789abcdefghijklmnopqrstuvwxyz";
 
@@ -29,7 +30,7 @@ export function newId(prefix: IdPrefix): string {
 }
 
 export function newUuid(): string {
-  return randomUUID();
+  return globalThis.crypto.randomUUID();
 }
 
 /** Deterministic layer id: stable across regenerations of the same slot. */

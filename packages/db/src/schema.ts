@@ -270,3 +270,71 @@ export const creditLedger = pgTable(
   },
   (table) => [index("credit_org_idx").on(table.organisationId)],
 );
+
+// ------------------------------------------------------------- packs & commerce (D-01, D-02, D-03)
+
+export const packs = pgTable(
+  "packs",
+  {
+    id: id(),
+    userId: text("user_id").references(() => users.id, { onDelete: "set null" }),
+    brief: jsonb("brief").notNull(),
+    status: text("status").notNull().default("created"),
+    selectedConceptId: text("selected_concept_id"),
+    requestedFormats: jsonb("requested_formats").notNull().default(sql`'[]'::jsonb`),
+    downloadKey: text("download_key"),
+    createdAt: createdAt(),
+    updatedAt: updatedAt(),
+  },
+  (table) => [index("packs_user_idx").on(table.userId), index("packs_status_idx").on(table.status)],
+);
+
+export const packConcepts = pgTable(
+  "pack_concepts",
+  {
+    id: id(),
+    packId: text("pack_id").notNull().references(() => packs.id, { onDelete: "cascade" }),
+    title: text("title").notNull().default(""),
+    description: text("description").notNull().default(""),
+    visualDirection: text("visual_direction").notNull().default(""),
+    vqs: real("vqs").notNull().default(0),
+    document: jsonb("document").notNull(),
+    previewKey: text("preview_key").notNull(),
+    thumbnailKey: text("thumbnail_key").notNull(),
+    status: text("status").notNull().default("generated"),
+    createdAt: createdAt(),
+  },
+  (table) => [index("pack_concepts_pack_idx").on(table.packId)],
+);
+
+export const orders = pgTable(
+  "orders",
+  {
+    id: id(),
+    packId: text("pack_id").notNull().references(() => packs.id, { onDelete: "cascade" }),
+    userId: text("user_id").references(() => users.id, { onDelete: "set null" }),
+    amount: integer("amount").notNull().default(299),
+    currency: text("currency").notNull().default("usd"),
+    provider: text("provider").notNull().default("stripe"),
+    providerSessionId: text("provider_session_id").notNull().default(""),
+    status: text("status").notNull().default("pending"),
+    createdAt: createdAt(),
+    updatedAt: updatedAt(),
+  },
+  (table) => [index("orders_pack_idx").on(table.packId), index("orders_status_idx").on(table.status)],
+);
+
+export const generationJobs = pgTable(
+  "generation_jobs",
+  {
+    id: id(),
+    packId: text("pack_id").notNull().references(() => packs.id, { onDelete: "cascade" }),
+    type: text("type").notNull().default("concepts"),
+    status: text("status").notNull().default("queued"),
+    progress: integer("progress").notNull().default(0),
+    error: text("error"),
+    createdAt: createdAt(),
+    updatedAt: updatedAt(),
+  },
+  (table) => [index("generation_jobs_pack_idx").on(table.packId)],
+);

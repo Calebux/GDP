@@ -44,6 +44,14 @@ const EnvSchema = z.object({
   CANDIDATES_PER_GENERATION: z.coerce.number().int().default(10),
   CONCEPTS_SHOWN: z.coerce.number().int().default(3),
   FONT_DIR: z.string().default("./assets/fonts"),
+
+  // Commerce & Payments (D-02, D-03)
+  APP_URL: z.string().default("http://localhost:3000"),
+  PAYMENT_PROVIDER: z.enum(["stripe", "dev"]).default("dev"),
+  STRIPE_SECRET_KEY: z.string().optional(),
+  STRIPE_WEBHOOK_SECRET: z.string().optional(),
+  PACK_PRICE_CENTS: z.coerce.number().int().default(299),
+  BUNDLE_PRICE_CENTS: z.coerce.number().int().default(999),
 });
 
 export type Env = z.infer<typeof EnvSchema>;

@@ -2,7 +2,7 @@
   "name": "gdp",
   "private": true,
   "version": "0.1.0",
-  "description": "AI Professional Graphic Design Platform \u2014 structured design documents, deterministic rendering.",
+  "description": "AI Professional Graphic Design Platform — structured design documents, deterministic rendering.",
   "workspaces": [
     "apps/*",
     "packages/*"
@@ -30,10 +30,15 @@
     "demo:generate": "tsx scripts/generate-demo.ts"
   },
   "devDependencies": {
+    "@types/jszip": "^3.4.0",
     "@types/node": "^22.10.5",
     "drizzle-kit": "^0.31.10",
     "tsx": "^4.23.13",
     "typescript": "^5.9.3",
     "vitest": "^4.1.11"
+  },
+  "dependencies": {
+    "jszip": "^3.10.1",
+    "stripe": "^22.6.1"
   }
 }

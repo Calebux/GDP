@@ -36,7 +36,9 @@
       "@gdp/retrieval": ["packages/retrieval/src/index.ts"],
       "@gdp/db": ["packages/db/src/index.ts"],
       "@gdp/db/*": ["packages/db/src/*"],
-      "@gdp/storage": ["packages/storage/src/index.ts"]
+      "@gdp/storage": ["packages/storage/src/index.ts"],
+      "@gdp/web": ["apps/web/src/index.ts"],
+      "@gdp/web/*": ["apps/web/src/*"]
     }
   },
   "exclude": ["node_modules", "**/dist", "**/.next"]
