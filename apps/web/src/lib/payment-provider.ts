@@ -206,7 +206,15 @@ export class DevPaymentProvider implements PaymentProvider {
   }
 }
 
-let providerInstance: PaymentProvider | null = null;
+/**
+ * Pinned to globalThis for the same reason as the repository's memory store:
+ * per-route module instances in dev would give /checkout and /payment-status
+ * separate DevPaymentProvider objects, and a session issued by one would not
+ * verify against the other.
+ */
+const providerStore = globalThis as typeof globalThis & {
+  __gdpPaymentProvider?: PaymentProvider | null;
+};
 
 /**
  * The provider is a singleton: DevPaymentProvider holds issued sessions in
@@ -218,12 +226,15 @@ let providerInstance: PaymentProvider | null = null;
  * to a provider that approves payments would give the whole catalogue away.
  */
 export function getPaymentProvider(): PaymentProvider {
-  if (providerInstance) return providerInstance;
+  const cached = providerStore.__gdpPaymentProvider;
+  if (cached) return cached;
 
   const e = env();
   if (e.PAYMENT_PROVIDER === "stripe" && e.STRIPE_SECRET_KEY) {
-    providerInstance = new StripePaymentProvider(e.STRIPE_SECRET_KEY, e.STRIPE_WEBHOOK_SECRET);
-    return providerInstance;
+    return (providerStore.__gdpPaymentProvider = new StripePaymentProvider(
+      e.STRIPE_SECRET_KEY,
+      e.STRIPE_WEBHOOK_SECRET,
+    ));
   }
 
   if (e.NODE_ENV === "production") {
@@ -237,11 +248,10 @@ export function getPaymentProvider(): PaymentProvider {
     paymentProvider: e.PAYMENT_PROVIDER,
     hasStripeKey: Boolean(e.STRIPE_SECRET_KEY),
   });
-  providerInstance = new DevPaymentProvider();
-  return providerInstance;
+  return (providerStore.__gdpPaymentProvider = new DevPaymentProvider());
 }
 
 /** Test seam — drops the memoised provider so env changes take effect. */
 export function resetPaymentProvider(): void {
-  providerInstance = null;
+  providerStore.__gdpPaymentProvider = null;
 }

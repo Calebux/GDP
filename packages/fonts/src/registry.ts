@@ -1,9 +1,13 @@
 import { existsSync, readdirSync } from "node:fs";
 import path from "node:path";
 import { createLogger, env } from "@gdp/core";
+import { resolveFromRoot } from "@gdp/core/paths";
 import { CATALOGUE_BY_FAMILY, FONT_CATALOGUE, type FontFamilyMeta } from "./catalogue.js";
 
 const log = createLogger("fonts");
+
+/** FONT_DIR resolved against the repo, not cwd — see resolveFromRoot. */
+const fontRoot = (): string => resolveFromRoot(env().FONT_DIR);
 
 export interface FontFile {
   family: string;
@@ -18,7 +22,7 @@ export function fileName(family: string, weight: number, italic: boolean): strin
   return `${familySlug(family)}-${weight}${italic ? "-italic" : ""}.ttf`;
 }
 
-export function familyDir(family: string, root = env().FONT_DIR): string {
+export function familyDir(family: string, root = fontRoot()): string {
   return path.resolve(root, familySlug(family));
 }
 
@@ -26,7 +30,7 @@ export function fontFilePath(
   family: string,
   weight: number,
   italic = false,
-  root = env().FONT_DIR,
+  root = fontRoot(),
 ): string {
   return path.join(familyDir(family, root), fileName(family, weight, italic));
 }
@@ -34,7 +38,7 @@ export function fontFilePath(
 let cache: Map<string, FontFile[]> | null = null;
 
 /** Scan the font directory once. Call `refreshFontIndex()` after `fonts:sync`. */
-export function fontIndex(root = env().FONT_DIR): Map<string, FontFile[]> {
+export function fontIndex(root = fontRoot()): Map<string, FontFile[]> {
   if (cache) return cache;
   const index = new Map<string, FontFile[]>();
   const abs = path.resolve(root);

@@ -27,10 +27,27 @@ export interface GenerationJobInfo {
   updatedAt: string;
 }
 
-// In-memory fallback stores (D-16: local-first degradation when DB is offline)
-const memoryPacks = new Map<string, StoredPack>();
-const memoryOrders = new Map<string, PackOrder>();
-const memoryJobs = new Map<string, GenerationJobInfo>();
+/**
+ * In-memory fallback stores (D-16: local-first degradation when DB is offline).
+ *
+ * Pinned to globalThis, not module scope. Next gives each route its own module
+ * instance in dev and re-evaluates modules on HMR, so a module-scoped Map means
+ * POST /api/packs and GET /api/packs/[id] look at two different stores and the
+ * pack "disappears" between them.
+ *
+ * This keeps the fallback coherent within one process. It is still one process:
+ * see getPack/getOrder, which read memory before Postgres and so cannot see a
+ * write from another instance. Anything multi-instance needs the database.
+ */
+const memoryStore = globalThis as typeof globalThis & {
+  __gdpPacks?: Map<string, StoredPack>;
+  __gdpOrders?: Map<string, PackOrder>;
+  __gdpJobs?: Map<string, GenerationJobInfo>;
+};
+
+const memoryPacks = (memoryStore.__gdpPacks ??= new Map<string, StoredPack>());
+const memoryOrders = (memoryStore.__gdpOrders ??= new Map<string, PackOrder>());
+const memoryJobs = (memoryStore.__gdpJobs ??= new Map<string, GenerationJobInfo>());
 
 export class PackRepository {
   async savePack(pack: Pack, concepts: StoredConcept[]): Promise<void> {

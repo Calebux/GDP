@@ -2,6 +2,7 @@ import { createHash, randomUUID } from "node:crypto";
 import { mkdir, readFile, rm, stat, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { createLogger, env } from "@gdp/core";
+import { resolveFromRoot } from "@gdp/core/paths";
 
 const log = createLogger("storage");
 
@@ -179,8 +180,8 @@ export function storage(): Storage {
     log.info("using S3 storage", { bucket: e.S3_BUCKET });
     instance = new S3Storage(e.S3_BUCKET, e.STORAGE_PUBLIC_URL);
   } else {
-    log.info("using local filesystem storage", { root: e.STORAGE_FS_ROOT });
-    instance = new FsStorage(e.STORAGE_FS_ROOT, e.STORAGE_PUBLIC_URL);
+    log.info("using local filesystem storage", { root: resolveFromRoot(e.STORAGE_FS_ROOT) });
+    instance = new FsStorage(resolveFromRoot(e.STORAGE_FS_ROOT), e.STORAGE_PUBLIC_URL);
   }
   return instance;
 }
