@@ -13,7 +13,11 @@ export type IdPrefix =
   | "job"
   | "pack"
   | "pay"
-  | "ord";
+  | "ord"
+  | "evt"
+  | "wal"
+  | "ctx"
+  | "shr";
 
 const ALPHABET = "0123456789abcdefghijklmnopqrstuvwxyz";
 

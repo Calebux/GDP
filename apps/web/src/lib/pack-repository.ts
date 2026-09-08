@@ -1,8 +1,31 @@
-import { createLogger } from "@gdp/core";
-import type { ConceptPreview, Pack, PackOrder, PackStatus } from "@gdp/core";
+import { createLogger, newId } from "@gdp/core";
+import type {
+  ConceptPreview,
+  CreditReferenceType,
+  CreditTransaction,
+  CreditTransactionType,
+  CreditWallet,
+  Pack,
+  PackOrder,
+  PackShare,
+  PackStatus,
+  PackVersion,
+  PaymentProviderType,
+} from "@gdp/core";
 import type { DesignDocument } from "@gdp/design-schema";
-import { db, dbAvailable, packConcepts, packs, orders, generationJobs } from "@gdp/db";
-import { eq, desc } from "drizzle-orm";
+import {
+  db,
+  dbAvailable,
+  packConcepts,
+  packs,
+  orders,
+  generationJobs,
+  creditWallets,
+  creditTransactions,
+  packVersions,
+  packShares,
+} from "@gdp/db";
+import { eq, desc, and } from "drizzle-orm";
 
 const log = createLogger("pack-repository");
 
@@ -31,6 +54,10 @@ export interface GenerationJobInfo {
 const memoryPacks = new Map<string, StoredPack>();
 const memoryOrders = new Map<string, PackOrder>();
 const memoryJobs = new Map<string, GenerationJobInfo>();
+const memoryWallets = new Map<string, CreditWallet>();
+const memoryTransactions = new Map<string, CreditTransaction>();
+const memoryVersions = new Map<string, PackVersion[]>();
+const memoryShares = new Map<string, PackShare>();
 
 export class PackRepository {
   async savePack(pack: Pack, concepts: StoredConcept[]): Promise<void> {
@@ -214,6 +241,8 @@ export class PackRepository {
           id: order.id,
           packId: order.packId,
           userId: order.userId ?? null,
+          productId: order.productId ?? "single",
+          creditsGranted: order.creditsGranted ?? 1,
           amount: order.amount,
           currency: order.currency,
           provider: order.provider,
@@ -242,9 +271,11 @@ export class PackRepository {
           id: r.id,
           packId: r.packId,
           userId: r.userId ?? undefined,
+          productId: r.productId,
+          creditsGranted: r.creditsGranted,
           amount: r.amount,
           currency: r.currency,
-          provider: r.provider as "stripe" | "dev",
+          provider: r.provider as PaymentProviderType,
           providerSessionId: r.providerSessionId,
           status: r.status as PackOrder["status"],
           createdAt: r.createdAt.toISOString(),
@@ -278,9 +309,11 @@ export class PackRepository {
           id: r.id,
           packId: r.packId,
           userId: r.userId ?? undefined,
+          productId: r.productId,
+          creditsGranted: r.creditsGranted,
           amount: r.amount,
           currency: r.currency,
-          provider: r.provider as "stripe" | "dev",
+          provider: r.provider as PaymentProviderType,
           providerSessionId: r.providerSessionId,
           status: r.status as PackOrder["status"],
           createdAt: r.createdAt.toISOString(),
@@ -313,9 +346,11 @@ export class PackRepository {
           id: r.id,
           packId: r.packId,
           userId: r.userId ?? undefined,
+          productId: r.productId,
+          creditsGranted: r.creditsGranted,
           amount: r.amount,
           currency: r.currency,
-          provider: r.provider as "stripe" | "dev",
+          provider: r.provider as PaymentProviderType,
           providerSessionId: r.providerSessionId,
           status: r.status as PackOrder["status"],
           createdAt: r.createdAt.toISOString(),
@@ -419,6 +454,336 @@ export class PackRepository {
     }
     return null;
   }
+
+  // ------------------------------------------------------------- D-02 Credit Wallet & Ledger
+
+  async getOrCreateWallet(userId: string): Promise<CreditWallet> {
+    const memory = memoryWallets.get(userId);
+    if (memory) return memory;
+
+    if (await dbAvailable()) {
+      try {
+        const database = db();
+        const rows = await database.select().from(creditWallets).where(eq(creditWallets.userId, userId)).limit(1);
+        if (rows[0]) {
+          const w = rows[0];
+          const wallet: CreditWallet = {
+            id: w.id,
+            userId: w.userId,
+            balance: w.balance,
+            lifetimePurchased: w.lifetimePurchased,
+            lifetimeUsed: w.lifetimeUsed,
+            createdAt: w.createdAt.toISOString(),
+            updatedAt: w.updatedAt.toISOString(),
+          };
+          memoryWallets.set(userId, wallet);
+          return wallet;
+        }
+      } catch (err) {
+        log.warn("Error getting wallet from PostgreSQL", { error: String(err) });
+      }
+    }
+
+    // Create new wallet
+    const now = new Date().toISOString();
+    const newWallet: CreditWallet = {
+      id: newId("wal"),
+      userId,
+      balance: 0,
+      lifetimePurchased: 0,
+      lifetimeUsed: 0,
+      createdAt: now,
+      updatedAt: now,
+    };
+
+    memoryWallets.set(userId, newWallet);
+
+    if (await dbAvailable()) {
+      try {
+        const database = db();
+        await database.insert(creditWallets).values({
+          id: newWallet.id,
+          userId: newWallet.userId,
+          balance: 0,
+          lifetimePurchased: 0,
+          lifetimeUsed: 0,
+          createdAt: new Date(newWallet.createdAt),
+          updatedAt: new Date(newWallet.updatedAt),
+        });
+      } catch (err) {
+        log.warn("Error creating wallet in PostgreSQL", { error: String(err) });
+      }
+    }
+
+    return newWallet;
+  }
+
+  async transactCredit(params: {
+    userId: string;
+    type: CreditTransactionType;
+    amount: number;
+    referenceType: CreditReferenceType;
+    referenceId: string;
+    description?: string;
+  }): Promise<{ success: boolean; wallet: CreditWallet; transaction?: CreditTransaction; error?: string }> {
+    const wallet = await this.getOrCreateWallet(params.userId);
+
+    // Prevent duplicate webhook / grant transactions for same reference
+    if (params.type === "purchase" || params.type === "grant") {
+      const existing = Array.from(memoryTransactions.values()).find(
+        (t) => t.referenceType === params.referenceType && t.referenceId === params.referenceId && t.type === params.type
+      );
+      if (existing) {
+        return { success: true, wallet, transaction: existing };
+      }
+    }
+
+    // Balance integrity: Balance must NEVER drop below 0
+    const newBalance = wallet.balance + params.amount;
+    if (newBalance < 0) {
+      return {
+        success: false,
+        wallet,
+        error: `Insufficient credit balance. Current: ${wallet.balance}, required: ${Math.abs(params.amount)}`,
+      };
+    }
+
+    const now = new Date().toISOString();
+    const txId = newId("ctx");
+    const transaction: CreditTransaction = {
+      id: txId,
+      walletId: wallet.id,
+      userId: params.userId,
+      type: params.type,
+      amount: params.amount,
+      balanceAfter: newBalance,
+      referenceType: params.referenceType,
+      referenceId: params.referenceId,
+      description: params.description || "",
+      createdAt: now,
+    };
+
+    // Update wallet stats
+    wallet.balance = newBalance;
+    if (params.amount > 0) {
+      wallet.lifetimePurchased += params.amount;
+    } else if (params.amount < 0) {
+      wallet.lifetimeUsed += Math.abs(params.amount);
+    }
+    wallet.updatedAt = now;
+
+    memoryWallets.set(params.userId, wallet);
+    memoryTransactions.set(txId, transaction);
+
+    if (await dbAvailable()) {
+      try {
+        const database = db();
+        await database
+          .update(creditWallets)
+          .set({
+            balance: wallet.balance,
+            lifetimePurchased: wallet.lifetimePurchased,
+            lifetimeUsed: wallet.lifetimeUsed,
+            updatedAt: new Date(wallet.updatedAt),
+          })
+          .where(eq(creditWallets.id, wallet.id));
+
+        await database.insert(creditTransactions).values({
+          id: transaction.id,
+          walletId: transaction.walletId,
+          userId: transaction.userId,
+          type: transaction.type,
+          amount: transaction.amount,
+          balanceAfter: transaction.balanceAfter,
+          referenceType: transaction.referenceType,
+          referenceId: transaction.referenceId,
+          description: transaction.description,
+          createdAt: new Date(transaction.createdAt),
+        });
+      } catch (err) {
+        log.warn("Error executing credit transaction in PostgreSQL", { error: String(err) });
+      }
+    }
+
+    return { success: true, wallet, transaction };
+  }
+
+  async getCreditTransactions(userId: string): Promise<CreditTransaction[]> {
+    const list: CreditTransaction[] = [];
+    for (const t of memoryTransactions.values()) {
+      if (t.userId === userId) list.push(t);
+    }
+
+    if (await dbAvailable()) {
+      try {
+        const database = db();
+        const rows = await database
+          .select()
+          .from(creditTransactions)
+          .where(eq(creditTransactions.userId, userId))
+          .orderBy(desc(creditTransactions.createdAt));
+
+        return rows.map((r) => ({
+          id: r.id,
+          walletId: r.walletId,
+          userId: r.userId,
+          type: r.type as CreditTransactionType,
+          amount: r.amount,
+          balanceAfter: r.balanceAfter,
+          referenceType: r.referenceType as CreditReferenceType,
+          referenceId: r.referenceId,
+          description: r.description,
+          createdAt: r.createdAt.toISOString(),
+        }));
+      } catch (err) {
+        log.warn("Error getting credit transactions from PostgreSQL", { error: String(err) });
+      }
+    }
+
+    return list.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+  }
+
+  // ------------------------------------------------------------- D-04 Pack Versions
+
+  async savePackVersion(version: PackVersion): Promise<void> {
+    const current = memoryVersions.get(version.packId) || [];
+    current.push(version);
+    memoryVersions.set(version.packId, current);
+
+    if (await dbAvailable()) {
+      try {
+        const database = db();
+        await database.insert(packVersions).values({
+          id: version.id,
+          packId: version.packId,
+          versionNumber: version.versionNumber,
+          parentVersionId: version.parentVersionId ?? null,
+          conceptId: version.conceptId,
+          label: version.label,
+          document: version.document,
+          patch: version.patch ?? null,
+          previewKey: version.previewKey,
+          downloadKey: version.downloadKey ?? null,
+          createdAt: new Date(version.createdAt),
+        });
+      } catch (err) {
+        log.warn("Error saving pack version to PostgreSQL", { error: String(err) });
+      }
+    }
+  }
+
+  async getPackVersions(packId: string): Promise<PackVersion[]> {
+    const memory = memoryVersions.get(packId);
+    if (memory && memory.length > 0) {
+      return [...memory].sort((a, b) => b.versionNumber - a.versionNumber);
+    }
+
+    if (await dbAvailable()) {
+      try {
+        const database = db();
+        const rows = await database
+          .select()
+          .from(packVersions)
+          .where(eq(packVersions.packId, packId))
+          .orderBy(desc(packVersions.versionNumber));
+
+        return rows.map((r) => ({
+          id: r.id,
+          packId: r.packId,
+          versionNumber: r.versionNumber,
+          parentVersionId: r.parentVersionId ?? undefined,
+          conceptId: r.conceptId,
+          label: r.label,
+          document: r.document,
+          patch: r.patch,
+          previewKey: r.previewKey,
+          downloadKey: r.downloadKey ?? undefined,
+          downloadUrl: `/api/packs/${r.packId}/download?version=${r.versionNumber}`,
+          createdAt: r.createdAt.toISOString(),
+        }));
+      } catch (err) {
+        log.warn("Error getting pack versions from PostgreSQL", { error: String(err) });
+      }
+    }
+
+    return memory ? [...memory].sort((a, b) => b.versionNumber - a.versionNumber) : [];
+  }
+
+  async getPackVersion(packId: string, versionId: string): Promise<PackVersion | null> {
+    const versions = await this.getPackVersions(packId);
+    return versions.find((v) => v.id === versionId || String(v.versionNumber) === versionId) || null;
+  }
+
+  // ------------------------------------------------------------- D-05 Pack Shares
+
+  async createPackShare(share: PackShare): Promise<void> {
+    memoryShares.set(share.token, share);
+
+    if (await dbAvailable()) {
+      try {
+        const database = db();
+        await database.insert(packShares).values({
+          id: share.id,
+          packId: share.packId,
+          conceptId: share.conceptId,
+          token: share.token,
+          viewsCount: share.viewsCount,
+          createdAt: new Date(share.createdAt),
+        });
+      } catch (err) {
+        log.warn("Error saving pack share to PostgreSQL", { error: String(err) });
+      }
+    }
+  }
+
+  async getPackShareByToken(token: string): Promise<PackShare | null> {
+    const memory = memoryShares.get(token);
+    if (memory) return memory;
+
+    if (await dbAvailable()) {
+      try {
+        const database = db();
+        const rows = await database.select().from(packShares).where(eq(packShares.token, token)).limit(1);
+        const r = rows[0];
+        if (!r) return null;
+        return {
+          id: r.id,
+          packId: r.packId,
+          conceptId: r.conceptId,
+          token: r.token,
+          viewsCount: r.viewsCount,
+          createdAt: r.createdAt.toISOString(),
+        };
+      } catch (err) {
+        log.warn("Error getting pack share from PostgreSQL", { error: String(err) });
+      }
+    }
+
+    return null;
+  }
+
+  async incrementShareViews(token: string): Promise<void> {
+    const share = memoryShares.get(token);
+    if (share) {
+      share.viewsCount++;
+    }
+
+    if (await dbAvailable()) {
+      try {
+        const database = db();
+        const current = await this.getPackShareByToken(token);
+        if (current) {
+          await database
+            .update(packShares)
+            .set({ viewsCount: current.viewsCount + 1 })
+            .where(eq(packShares.token, token));
+        }
+      } catch (err) {
+        log.warn("Error incrementing share views in PostgreSQL", { error: String(err) });
+      }
+    }
+  }
 }
 
 export const packRepository = new PackRepository();
+

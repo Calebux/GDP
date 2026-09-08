@@ -6,32 +6,25 @@ import { walletService } from "@/lib/wallet-service";
 import { trackEvent } from "@/lib/analytics";
 import { createLogger } from "@gdp/core";
 
-const log = createLogger("webhook:payment");
+const log = createLogger("webhook:paystack");
 
 export async function POST(req: NextRequest) {
   try {
     const rawBody = await req.text();
-    const signature =
-      req.headers.get("stripe-signature") ||
-      req.headers.get("x-signature") ||
-      req.headers.get("x-paystack-signature") ||
-      req.headers.get("verif-hash") ||
-      "";
+    const signature = req.headers.get("x-paystack-signature") || "";
 
-    const provider = getPaymentProvider();
+    const provider = getPaymentProvider("NG", "ngn");
     const result = await provider.handleWebhook(rawBody, signature);
 
     if (!result.handled) {
-      log.warn("Webhook unhandled or invalid", { error: result.error });
-      return NextResponse.json({ error: result.error || "Webhook not handled" }, { status: 400 });
+      log.warn("Paystack webhook signature invalid", { error: result.error });
+      return NextResponse.json({ error: result.error || "Invalid webhook signature" }, { status: 400 });
     }
 
     if (result.orderId && result.status === "paid") {
       const order = await packRepository.getOrder(result.orderId);
       if (order) {
-        // Idempotency check: if already paid, return 200 immediately
         if (order.status === "paid") {
-          log.info("Order already paid, duplicate webhook skipped", { orderId: order.id });
           return NextResponse.json({ received: true, duplicate: true });
         }
 
@@ -41,22 +34,19 @@ export async function POST(req: NextRequest) {
         const userId = order.userId || "anon_user";
         const creditsToGrant = order.creditsGranted || (order.productId === "bundle-5" ? 5 : 1);
 
-        // 1. Grant purchased credits to wallet
         await walletService.grantCreditsFromOrder({
           userId,
           orderId: order.id,
           credits: creditsToGrant,
         });
 
-        // 2. Consume 1 credit to unlock current pack
         await walletService.consumeCreditForPack({
           userId,
           packId: order.packId,
         });
 
-        // 3. Trigger packaging
         packagingService.packagePack(order.packId).catch((err: any) => {
-          log.error("Async packaging failed after webhook", { error: String(err), packId: order.packId });
+          log.error("Paystack packaging failed", { error: String(err), packId: order.packId });
         });
 
         await trackEvent({
@@ -67,16 +57,15 @@ export async function POST(req: NextRequest) {
             orderId: order.id,
             amount: order.amount,
             currency: order.currency,
-            productId: order.productId,
+            provider: "paystack",
           },
         });
       }
     }
 
-    return NextResponse.json({ received: true });
+    return NextResponse.json({ status: "success" });
   } catch (err: any) {
-    log.error("Webhook processing exception", { error: String(err) });
-    return NextResponse.json({ error: "Webhook internal error" }, { status: 500 });
+    log.error("Paystack webhook error", { error: String(err) });
+    return NextResponse.json({ error: "Internal error" }, { status: 500 });
   }
 }
-

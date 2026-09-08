@@ -250,11 +250,19 @@ export const events = pgTable(
     organisationId: text("organisation_id"),
     projectId: text("project_id"),
     designId: text("design_id"),
+    userId: text("user_id"),
+    packId: text("pack_id"),
+    sessionId: text("session_id"),
     type: text("type").notNull(),
     payload: jsonb("payload").notNull().default(sql`'{}'::jsonb`),
     createdAt: createdAt(),
   },
-  (table) => [index("events_type_idx").on(table.type), index("events_design_idx").on(table.designId)],
+  (table) => [
+    index("events_type_idx").on(table.type),
+    index("events_design_idx").on(table.designId),
+    index("events_pack_idx").on(table.packId),
+    index("events_session_idx").on(table.sessionId),
+  ],
 );
 
 /** §48 — design credits, not tokens. */
@@ -313,6 +321,8 @@ export const orders = pgTable(
     id: id(),
     packId: text("pack_id").notNull().references(() => packs.id, { onDelete: "cascade" }),
     userId: text("user_id").references(() => users.id, { onDelete: "set null" }),
+    productId: text("product_id").notNull().default("single"),
+    creditsGranted: integer("credits_granted").notNull().default(1),
     amount: integer("amount").notNull().default(299),
     currency: text("currency").notNull().default("usd"),
     provider: text("provider").notNull().default("stripe"),
@@ -337,4 +347,82 @@ export const generationJobs = pgTable(
     updatedAt: updatedAt(),
   },
   (table) => [index("generation_jobs_pack_idx").on(table.packId)],
+);
+
+// ------------------------------------------------------------- D-02 Credit Wallet & Ledger
+
+export const creditWallets = pgTable(
+  "credit_wallets",
+  {
+    id: id(),
+    userId: text("user_id").notNull().unique(),
+    balance: integer("balance").notNull().default(0),
+    lifetimePurchased: integer("lifetime_purchased").notNull().default(0),
+    lifetimeUsed: integer("lifetime_used").notNull().default(0),
+    createdAt: createdAt(),
+    updatedAt: updatedAt(),
+  },
+  (table) => [uniqueIndex("credit_wallets_user_idx").on(table.userId)],
+);
+
+export const creditTransactions = pgTable(
+  "credit_transactions",
+  {
+    id: id(),
+    walletId: text("wallet_id").notNull().references(() => creditWallets.id, { onDelete: "cascade" }),
+    userId: text("user_id").notNull(),
+    type: text("type").notNull(), // purchase | grant | consumption | refund | adjustment
+    amount: integer("amount").notNull(),
+    balanceAfter: integer("balance_after").notNull(),
+    referenceType: text("reference_type").notNull(), // order | pack | edit | admin
+    referenceId: text("reference_id").notNull(),
+    description: text("description").notNull().default(""),
+    createdAt: createdAt(),
+  },
+  (table) => [
+    index("credit_tx_user_idx").on(table.userId),
+    index("credit_tx_wallet_idx").on(table.walletId),
+    index("credit_tx_ref_idx").on(table.referenceType, table.referenceId),
+  ],
+);
+
+// ------------------------------------------------------------- D-04 Pack Versions
+
+export const packVersions = pgTable(
+  "pack_versions",
+  {
+    id: id(),
+    packId: text("pack_id").notNull().references(() => packs.id, { onDelete: "cascade" }),
+    versionNumber: integer("version_number").notNull(),
+    parentVersionId: text("parent_version_id"),
+    conceptId: text("concept_id").notNull(),
+    label: text("label").notNull().default(""),
+    document: jsonb("document").notNull(),
+    patch: jsonb("patch"),
+    previewKey: text("preview_key").notNull(),
+    downloadKey: text("download_key"),
+    createdAt: createdAt(),
+  },
+  (table) => [
+    index("pack_versions_pack_idx").on(table.packId),
+    index("pack_versions_pack_num_idx").on(table.packId, table.versionNumber),
+  ],
+);
+
+// ------------------------------------------------------------- D-05 Pack Shares & Referrals
+
+export const packShares = pgTable(
+  "pack_shares",
+  {
+    id: id(),
+    packId: text("pack_id").notNull().references(() => packs.id, { onDelete: "cascade" }),
+    conceptId: text("concept_id").notNull(),
+    token: text("token").notNull().unique(),
+    viewsCount: integer("views_count").notNull().default(0),
+    createdAt: createdAt(),
+  },
+  (table) => [
+    uniqueIndex("pack_shares_token_idx").on(table.token),
+    index("pack_shares_pack_idx").on(table.packId),
+  ],
 );

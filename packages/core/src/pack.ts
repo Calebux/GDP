@@ -151,13 +151,17 @@ export type PaymentStatus =
   | "cancelled"
   | "refunded";
 
+export type PaymentProviderType = "stripe" | "dev" | "paystack" | "flutterwave";
+
 export interface PackOrder {
   id: string;
   packId: string;
   userId?: string;
+  productId?: string;
+  creditsGranted?: number;
   amount: number;
   currency: string;
-  provider: "stripe" | "dev";
+  provider: PaymentProviderType;
   providerSessionId: string;
   status: PaymentStatus;
   checkoutUrl?: string;
@@ -177,6 +181,7 @@ export interface PackManifest {
   packId: string;
   conceptId: string;
   title: string;
+  version?: number;
   createdAt: string;
   formats: PackManifestFormat[];
   summary: {
@@ -184,4 +189,85 @@ export interface PackManifest {
     unwatermarked: boolean;
     license: string;
   };
+}
+
+export interface ProductPlan {
+  id: string;
+  name: string;
+  credits: number;
+  price: number; // in cents / kobo / pence
+  currency: string;
+  region: string;
+  description: string;
+  badge?: string;
+}
+
+export interface CreditWallet {
+  id: string;
+  userId: string;
+  balance: number;
+  lifetimePurchased: number;
+  lifetimeUsed: number;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export type CreditTransactionType = "purchase" | "grant" | "consumption" | "refund" | "adjustment";
+export type CreditReferenceType = "order" | "pack" | "edit" | "admin";
+
+export interface CreditTransaction {
+  id: string;
+  walletId: string;
+  userId: string;
+  type: CreditTransactionType;
+  amount: number;
+  balanceAfter: number;
+  referenceType: CreditReferenceType;
+  referenceId: string;
+  description: string;
+  createdAt: string;
+}
+
+export interface PackVersion {
+  id: string;
+  packId: string;
+  versionNumber: number;
+  parentVersionId?: string;
+  conceptId: string;
+  label: string;
+  document: any;
+  patch?: any;
+  previewKey: string;
+  downloadKey?: string;
+  downloadUrl?: string;
+  createdAt: string;
+}
+
+export interface PackShare {
+  id: string;
+  packId: string;
+  conceptId: string;
+  token: string;
+  viewsCount: number;
+  createdAt: string;
+}
+
+export interface PricingContext {
+  country: string;
+  region: "US" | "NG" | "GB" | "DEFAULT";
+  currency: "usd" | "ngn" | "gbp";
+}
+
+export interface FunnelMetrics {
+  previewViews: number;
+  checkoutStarts: number;
+  purchases: number;
+  previewToPurchaseConversionRate: number;
+  singlePurchases: number;
+  bundlePurchases: number;
+  creditsPurchased: number;
+  creditsConsumed: number;
+  sharesCreated: number;
+  shareViews: number;
+  referralPurchases: number;
 }

@@ -14,7 +14,10 @@ import { packRepository } from "./pack-repository";
 const log = createLogger("packaging-service");
 
 export class PackagingService {
-  async packagePack(packId: string): Promise<Pack> {
+  async packagePack(
+    packId: string,
+    options?: { versionNumber?: number; label?: string; parentVersionId?: string; patch?: any },
+  ): Promise<Pack> {
     const pack = await packRepository.getPack(packId);
     if (!pack) throw new Error(`Pack ${packId} not found`);
 
@@ -86,10 +89,15 @@ export class PackagingService {
     }
 
     // 3. Generate manifest.json (D-01)
+    const existingVersions = await packRepository.getPackVersions(packId);
+    const versionNumber = options?.versionNumber ?? (existingVersions.length > 0 ? existingVersions.length + 1 : 1);
+    const label = options?.label || (versionNumber === 1 ? "Original Design" : `Version ${versionNumber}`);
+
     const manifest: PackManifest = {
       packId,
       conceptId: pack.selectedConceptId,
       title: pack.brief.eventName || pack.brief.title || "Social Promo Pack",
+      version: versionNumber,
       createdAt: new Date().toISOString(),
       formats: manifestFormats,
       summary: {
@@ -110,7 +118,7 @@ export class PackagingService {
 
     // 5. Store zip in storage under protected key
     const store = storage();
-    const downloadKey = `protected/packs/${packId}/pack.zip`;
+    const downloadKey = `protected/packs/${packId}/pack_v${versionNumber}.zip`;
     await store.put({
       key: downloadKey,
       body: zipBuffer,
@@ -118,15 +126,40 @@ export class PackagingService {
       extension: "zip",
     });
 
+    // Also update current pack.zip pointer
+    await store.put({
+      key: `protected/packs/${packId}/pack.zip`,
+      body: zipBuffer,
+      contentType: "application/zip",
+      extension: "zip",
+    });
+
     log.info("Finished packaging pack", {
       packId,
+      versionNumber,
       zipBytes: zipBuffer.byteLength,
       filesCount: manifestFormats.length,
     });
 
+    // Save pack version record
+    await packRepository.savePackVersion({
+      id: `ver_${packId}_${versionNumber}`,
+      packId,
+      versionNumber,
+      parentVersionId: options?.parentVersionId,
+      conceptId: pack.selectedConceptId,
+      label,
+      document: stored.doc,
+      patch: options?.patch,
+      previewKey: stored.preview.previewUrl,
+      downloadKey,
+      downloadUrl: `/api/packs/${packId}/download?version=${versionNumber}`,
+      createdAt: new Date().toISOString(),
+    });
+
     const updated = await packRepository.updatePack(packId, {
       status: "packaged",
-      downloadKey,
+      downloadKey: `protected/packs/${packId}/pack.zip`,
       downloadUrl: `/api/packs/${packId}/download`,
     });
 

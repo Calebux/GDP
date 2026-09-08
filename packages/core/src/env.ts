@@ -45,11 +45,15 @@ const EnvSchema = z.object({
   CONCEPTS_SHOWN: z.coerce.number().int().default(3),
   FONT_DIR: z.string().default("./assets/fonts"),
 
-  // Commerce & Payments (D-02, D-03)
+  // Commerce & Payments (D-02, D-03, D-06)
   APP_URL: z.string().default("http://localhost:3000"),
-  PAYMENT_PROVIDER: z.enum(["stripe", "dev"]).default("dev"),
+  PAYMENT_PROVIDER: z.enum(["stripe", "dev", "paystack", "flutterwave"]).default("dev"),
   STRIPE_SECRET_KEY: z.string().optional(),
   STRIPE_WEBHOOK_SECRET: z.string().optional(),
+  PAYSTACK_SECRET_KEY: z.string().optional(),
+  PAYSTACK_WEBHOOK_SECRET: z.string().optional(),
+  FLUTTERWAVE_SECRET_KEY: z.string().optional(),
+  FLUTTERWAVE_WEBHOOK_SECRET: z.string().optional(),
   PACK_PRICE_CENTS: z.coerce.number().int().default(299),
   BUNDLE_PRICE_CENTS: z.coerce.number().int().default(999),
 });
