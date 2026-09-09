@@ -129,11 +129,19 @@ export type PackStatus =
   | "packaged"
   | "failed";
 
+export type EditCategory =
+  | "TEXT_CORRECTION"
+  | "DATE_TIME_CORRECTION"
+  | "PHOTO_SWAP"
+  | "STRUCTURAL_REGENERATION"
+  | "CREATIVE_REGENERATION";
+
 export interface Pack {
   id: string;
   userId?: string;
   brief: SmartBrief;
   status: PackStatus;
+  packDefinitionVersion?: string;
   concepts: ConceptPreview[];
   selectedConceptId?: string;
   requestedFormats: FormatId[];
@@ -164,6 +172,11 @@ export interface PackOrder {
   provider: PaymentProviderType;
   providerSessionId: string;
   status: PaymentStatus;
+  refundStatus?: "none" | "requested" | "partial" | "completed" | "rejected";
+  refundReason?: string;
+  refundedAt?: string;
+  refundAmount?: number;
+  packDefinitionVersion?: string;
   checkoutUrl?: string;
   createdAt: string;
   updatedAt: string;

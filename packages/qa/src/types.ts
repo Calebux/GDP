@@ -18,9 +18,12 @@ export interface ComponentScore {
 
 /** §66 — the Visual Quality Score. */
 export interface VqsReport {
+  vqsVersion: string;
   total: number;
   passed: boolean;
   threshold: number;
+  isBlocking: boolean;
+  contentDensityRatio?: number;
   components: ComponentScore[];
   issues: QaIssue[];
   /** Short, human sentences for the designer-facing debug panel. */
@@ -38,6 +41,9 @@ export interface AssetFacts {
 export interface QaContext {
   assets?: Record<string, AssetFacts>;
   threshold?: number;
+  vqsVersion?: string;
+  blockingMode?: boolean;
+  experimentalChecks?: boolean;
   /** Formats the design will also be exported to — tightens safe-area checks. */
   targetFormats?: string[];
 }

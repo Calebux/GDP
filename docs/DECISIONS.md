@@ -316,6 +316,36 @@ rather than crashing.
 
 ---
 
+---
+
+### D-17 — Hybrid Vision Microservice with Circuit Breaker & COGS Metering
+**Status:** accepted (2026-09-09) — resolves Open Question 4.
+
+High-frequency image processing (subject background cutouts, ink coverage analysis, visual balance checks) is delegated to an internal FastAPI microservice running U2Net / BiRefNet on self-hosted compute. The TypeScript core calls this service via an HMAC-authenticated client with circuit breaker fallback (graceful degradation to local Canvas/Sharp operations or remote cloud fallbacks). Every vision operation records latency, byte sizes, and estimated compute cost in `vision_metering`.
+
+---
+
+### D-18 — VQS v1.1 Composition Density Gate & Blind Calibration
+**Status:** accepted (2026-09-09) — refines §21, §66.
+
+Fixes the regression where sparse designs scored 97.4/100 due to canvas coverage carrying insufficient penalty weight. VQS v1.1 introduces an empirical content density ratio (`contentDensityRatio`) and non-linear penalties for canvases with < 8% text/subject coverage. An empirical double-blind evaluation protocol (`docs/VQS_EXPERIMENT_PROTOCOL.md`) and rater interface benchmark VQS scores against human professional graphic designers.
+
+---
+
+### D-19 — Definitive Promo Pack Specification (Pack Definition v1)
+**Status:** accepted (2026-09-09) — resolves Open Question 2.
+
+A "GDP Promo Pack" is productized under `PACK_DEFINITION_V1`:
+1. **8 Standardized Multi-Surface Formats**: Instagram Square (1080×1080), Instagram Story/Reels (1080×1920), Portrait/Feed (1080×1350), Landscape/Twitter (1200×675), Flyer (1200×1700), WhatsApp Status (1080×1920), Web Banner (1200×400), and Event Cover (1200×630).
+2. **High-Res Unwatermarked Delivery**: Instant ZIP archive containing full-bleed 300 DPI equivalent PNGs and printable PDFs.
+3. **Copy Bundle Included**: Formatted social media caption copy, 10–15 contextual hashtags, and primary call-to-action text included in pack payload.
+4. **Post-Purchase Fixes**: Unlimited free text corrections (`TEXT_CORRECTION`) and date/time fixes (`DATE_TIME_CORRECTION`).
+5. **Post-Purchase Photo Swapping**: Included free swap of the subject image without burning generation credits.
+6. **Metered Creative Rerolls**: 3 included structural/creative regenerations per pack. Further regenerations consume 1 wallet credit.
+7. **Retention Guarantee**: 90-day cloud download retention with one-click re-export.
+
+---
+
 ## Deferred, with the reason
 
 | Deferred | Why it is safe to defer |
@@ -329,13 +359,14 @@ rather than crashing.
 
 ---
 
-## Open questions
+## Status of Open Questions
 
-1. **Does the distribution loop work?** (D-05.) Everything else in the pricing
-   model depends on it. Measure in Phase 6 before tuning the engine further.
-2. **What exactly is "a pack"?** Format list is settled by `FORMATS`; whether it
-   also includes caption copy is not.
-3. **Refund policy at $2.99.** A no-questions refund is cheaper than a support
-   thread, but invites abuse on a digital good delivered instantly.
-4. **Background-removal cost at volume.** Self-hosted `rembg` on CPU is cheap but
-   needs a box; a hosted API at $0.02–0.20/image is a meaningful share of COGS.
+1. **Does the distribution loop work?** (D-05.)
+   - *Status:* **Instrumented & Measurable**. Fully tracked with unique share tokens, OpenGraph previews, referral cookies, K-factor reporting (`scripts/distribution-report.ts`), and weekly cohort aggregation (`docs/DISTRIBUTION_LOOP_PROTOCOL.md`). Real-world virality ($K \ge 1.0$) awaits live human traffic cohorts.
+2. **What exactly is "a pack"?**
+   - *Status:* **Resolved**. Formally codified in `D-19` and `@gdp/core` via `PACK_DEFINITION_V1` (8 formats, unwatermarked high-res exports, caption/hashtag bundle, free text/date edits, photo swap, 3 included regenerations, 90-day retention).
+3. **Refund policy at $2.99.**
+   - *Status:* **Resolved**. Formally codified in `docs/REFUND_POLICY.md` and enforced via `POST /api/admin/orders/:id/refund`. Pre-purchase watermarked previews eliminate quality surprises; automated 24-hour refunds are provided for verified technical export/packaging failures; abuse is prevented by revocations.
+4. **Background-removal cost at volume.**
+   - *Status:* **Resolved**. Codified in `D-17` with the FastAPI Vision Microservice (`services/vision`), circuit breaker fallback, and sub-cent unit economics metered in `vision_metering` (`scripts/vision-cogs-report.ts`).
+

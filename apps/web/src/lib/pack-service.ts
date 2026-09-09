@@ -25,6 +25,7 @@ import { packagingService } from "./packaging-service";
 import { getProductPlan } from "./pricing";
 import { walletService } from "./wallet-service";
 import { trackEvent } from "./analytics";
+import { classifyEdit } from "./edit-classifier";
 
 const log = createLogger("pack-service");
 
@@ -368,7 +369,17 @@ export class PackService {
 
   // ------------------------------------------------------------- D-04 Detail Fixer Engine
 
-  async interpretEdit(packId: string, instruction: string): Promise<{ patch: any; summary: string; opsCount: number; creditCost: number }> {
+  // ------------------------------------------------------------- D-04 Detail Fixer Engine
+
+  async interpretEdit(packId: string, instruction: string): Promise<{
+    patch: any;
+    summary: string;
+    opsCount: number;
+    category: string;
+    creditCost: number;
+    isFree: boolean;
+    reason: string;
+  }> {
     const pack = await packRepository.getPack(packId);
     if (!pack) throw new Error(`Pack ${packId} not found`);
     if (!pack.selectedConceptId) throw new Error(`Pack ${packId} has no concept selected`);
@@ -381,11 +392,16 @@ export class PackService {
       instruction,
     });
 
+    const classification = classifyEdit(instruction, result.patch, stored.doc);
+
     return {
       patch: result.patch,
       summary: result.patch.summary || "Apply changes",
       opsCount: result.patch.ops.length,
-      creditCost: 1,
+      category: classification.category,
+      creditCost: classification.creditCost,
+      isFree: classification.isFree,
+      reason: classification.reason,
     };
   }
 
@@ -403,31 +419,37 @@ export class PackService {
 
     const userId = options.userId || pack.userId || "anon_user";
 
-    // 1. Consume 1 credit for regeneration
-    const consumeRes = await walletService.consumeCreditForEdit({
-      userId,
-      packId,
-      description: instruction,
+    // 1. Interpret edit instruction first
+    const { patch } = await runInterpretEdit({
+      doc: stored.doc,
+      instruction,
     });
 
-    if (!consumeRes.success) {
-      throw new Error(consumeRes.error || "Insufficient credits for regeneration");
+    // 2. Server-authoritative classification (D-04)
+    const classification = classifyEdit(instruction, patch, stored.doc);
+    const requiresCredit = classification.creditCost > 0;
+    let creditReserved = false;
+
+    // 3. Atomically reserve credit ONLY for metered structural/creative changes
+    if (requiresCredit) {
+      const consumeRes = await walletService.consumeCreditForEdit({
+        userId,
+        packId,
+        description: instruction,
+      });
+
+      if (!consumeRes.success) {
+        throw new Error(consumeRes.error || "Insufficient credits for regeneration");
+      }
+      creditReserved = true;
     }
 
     try {
-      // 2. Interpret edit instruction
-      const { patch } = await runInterpretEdit({
-        doc: stored.doc,
-        instruction,
-      });
-
-      // 3. Apply patch
+      // 4. Apply patch
       const applied = applyPatch(stored.doc, patch);
-
-      // 4. Update stored concept with new document
       stored.doc = applied.doc;
 
-      // 5. Re-render updated preview
+      // 5. Re-render preview
       const renderPreview = await renderDocument(applied.doc, {
         format: "png",
         scale: 0.6,
@@ -445,17 +467,17 @@ export class PackService {
         contentType: "image/png",
       });
 
-      // Update concept previewUrl
       stored.preview.previewUrl = store.url(previewKey);
       await packRepository.updatePack(packId, {
         concepts: pack.concepts.map((c) => (c.id === pack.selectedConceptId ? stored.preview : c)),
       });
 
-      // 6. Repackage pack into new ZIP version
+      // 6. Repackage pack with version record and category lineage
       const packagedPack = await packagingService.packagePack(packId, {
         versionNumber: nextVersionNum,
         label: patch.summary || instruction,
         patch,
+        editCategory: classification.category,
       });
 
       const versions = await packRepository.getPackVersions(packId);
@@ -468,6 +490,9 @@ export class PackService {
         payload: {
           versionNumber: nextVersionNum,
           summary: patch.summary,
+          category: classification.category,
+          isFree: classification.isFree,
+          creditCost: classification.creditCost,
         },
       });
 
@@ -477,14 +502,193 @@ export class PackService {
         summary: patch.summary,
       };
     } catch (err: any) {
-      // Refund reserved credit if regeneration fails
-      await walletService.refundCreditForFailedEdit({
-        userId,
-        packId,
-        reason: err?.message || "Regeneration failed",
-      });
+      // Refund reserved credit if a metered regeneration fails
+      if (creditReserved) {
+        await walletService.refundCreditForFailedEdit({
+          userId,
+          packId,
+          reason: err?.message || "Regeneration failed",
+        });
+      }
       throw err;
     }
+  }
+
+  // ------------------------------------------------------------- D-04 Post-Purchase Photo Swap
+
+  async swapPhoto(
+    packIdOrParams:
+      | string
+      | {
+          packId: string;
+          userId?: string;
+          fileBuffer?: Buffer;
+          imageBase64?: string;
+          mimeType: string;
+          originalFilename?: string;
+        },
+    optionsArg?: {
+      userId?: string;
+      fileBuffer?: Buffer;
+      imageBase64?: string;
+      mimeType: string;
+      originalFilename?: string;
+    },
+  ): Promise<{ pack: Pack; version: PackVersion; previewUrl: string; assetUrl?: string }> {
+    const packId = typeof packIdOrParams === "string" ? packIdOrParams : packIdOrParams.packId;
+    const opts = typeof packIdOrParams === "string" ? optionsArg! : packIdOrParams;
+
+    const pack = await packRepository.getPack(packId);
+    if (!pack) throw new Error(`Pack ${packId} not found`);
+    if (!pack.selectedConceptId) throw new Error(`Pack ${packId} has no concept selected`);
+
+    const order = await packRepository.getOrderByPackId(packId);
+    if (!order || order.status !== "paid") {
+      throw new Error("Unauthorized: Photo swapping requires a purchased pack");
+    }
+
+    let fileBuffer = opts.fileBuffer;
+    if (!fileBuffer && opts.imageBase64) {
+      const b64 = opts.imageBase64.includes(",") ? opts.imageBase64.split(",", 2)[1]! : opts.imageBase64;
+      fileBuffer = Buffer.from(b64, "base64");
+    }
+
+    if (!fileBuffer || fileBuffer.length === 0) {
+      throw new Error("Invalid image: empty or missing file buffer");
+    }
+
+    // Magic byte inspection
+    const isPng =
+      fileBuffer.length >= 8 &&
+      fileBuffer[0] === 0x89 &&
+      fileBuffer[1] === 0x50 &&
+      fileBuffer[2] === 0x4e &&
+      fileBuffer[3] === 0x47;
+    const isJpg =
+      fileBuffer.length >= 3 &&
+      fileBuffer[0] === 0xff &&
+      fileBuffer[1] === 0xd8 &&
+      fileBuffer[2] === 0xff;
+    const isWebp =
+      fileBuffer.length >= 12 &&
+      fileBuffer.toString("ascii", 0, 4) === "RIFF" &&
+      fileBuffer.toString("ascii", 8, 12) === "WEBP";
+
+    if (!isPng && !isJpg && !isWebp) {
+      throw new Error("Invalid image format. Only PNG, JPEG, and WebP are allowed.");
+    }
+
+    const stored = await packRepository.getStoredConcept(packId, pack.selectedConceptId);
+    if (!stored) throw new Error(`Concept document not found for pack ${packId}`);
+
+    const assetId = `ast_${newId("photo")}`;
+    const storageKey = `protected/packs/${packId}/uploads/${assetId}.png`;
+
+    const store = storage();
+    await store.put({
+      key: storageKey,
+      body: fileBuffer,
+      contentType: opts.mimeType || "image/png",
+      extension: "png",
+    });
+
+    await packRepository.savePackAsset({
+      id: assetId,
+      packId,
+      userId: opts.userId,
+      kind: "subject_photo",
+      storageKey,
+      originalFilename: opts.originalFilename || "uploaded_photo.png",
+      mimeType: opts.mimeType || "image/png",
+      bytes: fileBuffer.byteLength,
+    });
+
+    // Update the subject layer in document
+    const doc = stored.doc;
+    let subjectReplaced = false;
+    doc.layers = doc.layers.map((layer: any) => {
+      if (layer.slot === "subject" && layer.type === "image") {
+        subjectReplaced = true;
+        return {
+          ...layer,
+          assetId,
+        };
+      }
+      return layer;
+    });
+
+    if (!subjectReplaced) {
+      const headline = doc.layers.find((l: any) => l.slot === "headline");
+      doc.layers.push({
+        type: "image",
+        id: `layer_${assetId}`,
+        name: "Subject Photo",
+        slot: "subject",
+        assetId,
+        x: headline ? headline.x : doc.canvas.margin,
+        y: doc.canvas.height * 0.45,
+        width: doc.canvas.width * 0.6,
+        height: doc.canvas.height * 0.5,
+        rotation: 0,
+        opacity: 1,
+        zIndex: 5,
+        visible: true,
+        locked: false,
+        immutable: false,
+        maskAssetId: null,
+      });
+    }
+
+    stored.doc = doc;
+
+    const renderPreview = await renderDocument(doc, {
+      format: "png",
+      scale: 0.6,
+      watermark: undefined,
+    });
+
+    const existingVersions = await packRepository.getPackVersions(packId);
+    const nextVersionNum = existingVersions.length + 1;
+    const previewKey = `previews/${packId}/${pack.selectedConceptId}_v${nextVersionNum}.png`;
+
+    await store.put({
+      key: previewKey,
+      body: renderPreview.buffer,
+      contentType: "image/png",
+    });
+
+    stored.preview.previewUrl = store.url(previewKey);
+    await packRepository.updatePack(packId, {
+      concepts: pack.concepts.map((c) => (c.id === pack.selectedConceptId ? stored.preview : c)),
+    });
+
+    const packagedPack = await packagingService.packagePack(packId, {
+      versionNumber: nextVersionNum,
+      label: `Photo swap (${opts.originalFilename || "uploaded photo"})`,
+      editCategory: "PHOTO_SWAP",
+    });
+
+    const versions = await packRepository.getPackVersions(packId);
+    const latestVersion = versions[0]!;
+
+    await trackEvent({
+      type: "photo_swapped",
+      userId: opts.userId,
+      packId,
+      payload: {
+        assetId,
+        versionNumber: nextVersionNum,
+      },
+    });
+
+    return {
+      success: true,
+      pack: packagedPack,
+      version: latestVersion,
+      versionNumber: nextVersionNum,
+      previewUrl: stored.preview.previewUrl,
+      assetUrl: store.url(storageKey),
+    };
   }
 
   async restoreVersion(packId: string, versionNumber: number, options: { userId?: string } = {}): Promise<{ pack: Pack; version: PackVersion }> {

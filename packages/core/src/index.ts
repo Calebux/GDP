@@ -6,3 +6,5 @@ export * from "./env.js";
 export * from "./geometry.js";
 export * from "./color.js";
 export * from "./pack.js";
+export * from "./pack-definition.js";
+export * from "./vision-client.js";

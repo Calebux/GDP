@@ -25,6 +25,8 @@ export interface WebhookResult {
   sessionId?: string;
   status?: PaymentStatus;
   error?: string;
+  eventId?: string;
+  eventType?: string;
 }
 
 export interface PaymentProvider {
@@ -133,10 +135,12 @@ export class StripePaymentProvider implements PaymentProvider {
           orderId: session.metadata?.orderId,
           sessionId: session.id,
           status: "paid",
+          eventId: event.id,
+          eventType: event.type,
         };
       }
 
-      return { handled: true };
+      return { handled: true, eventId: event.id, eventType: event.type };
     } catch (err) {
       log.error("Stripe webhook verification error", { error: String(err) });
       return { handled: false, error: String(err) };
@@ -245,22 +249,38 @@ export class PaystackPaymentProvider implements PaymentProvider {
     const rawBody = typeof body === "string" ? body : body.toString("utf8");
     const hash = crypto.createHmac("sha512", this.webhookSecret || this.secretKey).update(rawBody).digest("hex");
 
-    if (hash !== signature && signature !== "test-signature") {
+    let isSigValid = false;
+    if (signature === "test-signature") {
+      isSigValid = true;
+    } else {
+      try {
+        const hashBuf = Buffer.from(hash, "utf8");
+        const sigBuf = Buffer.from(signature, "utf8");
+        isSigValid = hashBuf.length === sigBuf.length && crypto.timingSafeEqual(hashBuf, sigBuf);
+      } catch {
+        isSigValid = false;
+      }
+    }
+
+    if (!isSigValid) {
       log.warn("Invalid Paystack webhook signature");
       return { handled: false, error: "Invalid signature" };
     }
 
     try {
       const payload = JSON.parse(rawBody);
+      const eventId = payload.data?.id ? String(payload.data.id) : (payload.data?.reference || payload.id || `paystack_${Date.now()}`);
       if (payload.event === "charge.success") {
         return {
           handled: true,
           orderId: payload.data.reference,
           sessionId: payload.data.reference,
           status: "paid",
+          eventId,
+          eventType: payload.event,
         };
       }
-      return { handled: true };
+      return { handled: true, eventId, eventType: payload.event };
     } catch (err) {
       return { handled: false, error: String(err) };
     }
@@ -367,7 +387,20 @@ export class FlutterwavePaymentProvider implements PaymentProvider {
         ? signatureOrHeaders
         : (signatureOrHeaders["verif-hash"] as string) || "";
 
-    if (this.webhookSecret && signature !== this.webhookSecret && signature !== "test-signature") {
+    let isSigValid = false;
+    if (signature === "test-signature" || !this.webhookSecret) {
+      isSigValid = true;
+    } else {
+      try {
+        const secretBuf = Buffer.from(this.webhookSecret, "utf8");
+        const sigBuf = Buffer.from(signature, "utf8");
+        isSigValid = secretBuf.length === sigBuf.length && crypto.timingSafeEqual(secretBuf, sigBuf);
+      } catch {
+        isSigValid = false;
+      }
+    }
+
+    if (!isSigValid) {
       log.warn("Invalid Flutterwave webhook hash");
       return { handled: false, error: "Invalid verif-hash" };
     }
@@ -376,17 +409,22 @@ export class FlutterwavePaymentProvider implements PaymentProvider {
       const rawBody = typeof body === "string" ? body : body.toString("utf8");
       const payload = JSON.parse(rawBody);
 
+      const txRef = payload.data?.tx_ref || payload.txRef;
+      const eventId = payload.data?.id ? String(payload.data.id) : (txRef || `flw_${Date.now()}`);
+      const eventType = payload.event || payload.status || "charge.completed";
+
       if (payload.status === "successful" || payload.event === "charge.completed") {
-        const txRef = payload.data?.tx_ref || payload.txRef;
         return {
           handled: true,
           orderId: txRef,
           sessionId: txRef,
           status: "paid",
+          eventId,
+          eventType,
         };
       }
 
-      return { handled: true };
+      return { handled: true, eventId, eventType };
     } catch (err) {
       return { handled: false, error: String(err) };
     }
@@ -400,6 +438,10 @@ export class DevPaymentProvider implements PaymentProvider {
 
   async createCheckoutSession(pack: Pack, order: PackOrder, product?: ProductPlan): Promise<CheckoutSessionResult> {
     const e = env();
+    if (process.env.NODE_ENV === "production" && !e.DEV_PAYMENT_OVERRIDE) {
+      throw new Error("DevPaymentProvider cannot be used in production without DEV_PAYMENT_OVERRIDE=true");
+    }
+
     const appUrl = e.APP_URL.replace(/\/$/, "");
     const sessionId = `dev_sess_${newId("pay")}`;
 
@@ -454,11 +496,14 @@ export class DevPaymentProvider implements PaymentProvider {
         return { handled: false, error: "Invalid dev webhook signature" };
       }
 
+      const eventId = payload.eventId || payload.sessionId || `dev_wh_${Date.now()}`;
       return {
         handled: true,
         orderId: payload.orderId,
         sessionId: payload.sessionId,
         status: payload.status ?? "paid",
+        eventId,
+        eventType: "dev.payment",
       };
     } catch (err) {
       return { handled: false, error: "Malformed webhook payload" };
@@ -470,9 +515,20 @@ export class DevPaymentProvider implements PaymentProvider {
  * Factory for resolving the appropriate regional payment provider (D-06).
  * Selects Paystack / Flutterwave for Nigeria (NGN), Stripe for US / UK / Global,
  * and falls back to DevPaymentProvider for offline / local-first dev.
+ *
+ * Safety default: When ENABLE_LIVE_PAYMENTS=false, always returns DevPaymentProvider
+ * (guarded against unintentional live transactions).
  */
 export function getPaymentProvider(region?: string, currency?: string): PaymentProvider {
   const e = env();
+
+  // If live payments are explicitly disabled (default safe configuration)
+  if (!e.ENABLE_LIVE_PAYMENTS) {
+    if (process.env.NODE_ENV === "production" && !e.DEV_PAYMENT_OVERRIDE) {
+      log.warn("ENABLE_LIVE_PAYMENTS is false in production; live card/bank payments are blocked.");
+    }
+    return new DevPaymentProvider();
+  }
 
   // If in dev payment mode
   if (e.PAYMENT_PROVIDER === "dev") {

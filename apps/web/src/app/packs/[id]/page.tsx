@@ -29,9 +29,21 @@ export default function PackPage({ params }: { params: Promise<{ id: string }> }
   const [versions, setVersions] = useState<PackVersion[]>([]);
   const [editInstruction, setEditInstruction] = useState("");
   const [interpretingEdit, setInterpretingEdit] = useState(false);
-  const [pendingPatch, setPendingPatch] = useState<{ summary: string; opsCount: number; creditCost: number } | null>(null);
+  const [pendingPatch, setPendingPatch] = useState<{
+    summary: string;
+    opsCount: number;
+    creditCost: number;
+    category?: string;
+    isFree?: boolean;
+    reason?: string;
+  } | null>(null);
   const [applyingEdit, setApplyingEdit] = useState(false);
   const [editSuccessMessage, setEditSuccessMessage] = useState("");
+
+  // D-04: Photo Swapping State
+  const [photoUploading, setPhotoUploading] = useState(false);
+  const [photoFile, setPhotoFile] = useState<File | null>(null);
+  const [photoError, setPhotoError] = useState("");
 
   // D-05: Sharing & Free Export
   const [shareModalOpen, setShareModalOpen] = useState(false);
@@ -222,7 +234,10 @@ export default function PackPage({ params }: { params: Promise<{ id: string }> }
       setPendingPatch({
         summary: data.summary,
         opsCount: data.opsCount,
-        creditCost: data.creditCost || 1,
+        category: data.category,
+        creditCost: data.creditCost ?? (data.isFree ? 0 : 1),
+        isFree: Boolean(data.isFree),
+        reason: data.reason,
       });
     } catch (err: any) {
       setError(err?.message || "Failed to interpret edit");
@@ -256,6 +271,41 @@ export default function PackPage({ params }: { params: Promise<{ id: string }> }
       setError(err?.message || "Failed to apply edit");
     } finally {
       setApplyingEdit(false);
+    }
+  };
+
+  // Detail Fixer: Post-Purchase Photo Swap (D-04)
+  const handlePhotoSwap = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!photoFile) return;
+
+    setPhotoUploading(true);
+    setPhotoError("");
+    setError("");
+    setEditSuccessMessage("");
+
+    try {
+      const formData = new FormData();
+      formData.append("file", photoFile);
+
+      const res = await fetch(`/api/packs/${id}/assets/swap-photo`, {
+        method: "POST",
+        body: formData,
+      });
+
+      const data = await res.json();
+      if (!res.ok) {
+        throw new Error(data.error || "Failed to swap photo");
+      }
+
+      setPhotoFile(null);
+      setEditSuccessMessage("✓ Photo swapped successfully! New unwatermarked version generated.");
+      await loadVersions();
+      await loadPack();
+    } catch (err: any) {
+      setPhotoError(err?.message || "Failed to upload photo");
+    } finally {
+      setPhotoUploading(false);
     }
   };
 
@@ -529,15 +579,15 @@ export default function PackPage({ params }: { params: Promise<{ id: string }> }
             {/* Right: D-04 Detail Fixer Input & Controls */}
             <div className="lg:col-span-7 space-y-6">
               <div className="glass-panel-elevated p-6 rounded-3xl border-amber-500/20">
-                <div className="flex items-center gap-2 mb-2">
+                <div className="flex items-center justify-between gap-2 mb-2">
                   <span className="pulse-badge text-[10px]">D-04 Detail Fixer</span>
-                  <span className="text-xs text-zinc-400 font-mono">1 Credit per Regeneration</span>
+                  <span className="text-[11px] text-emerald-400 font-semibold">Text &amp; Date Edits: FREE</span>
                 </div>
                 <h2 className="text-xl font-bold text-white tracking-tight mb-1">
                   Need to make a change?
                 </h2>
                 <p className="text-xs text-zinc-400 mb-4">
-                  Tell us what to fix in plain words. The engine updates geometry, hierarchy, and optical balance without moving layers by hand.
+                  Text, date, and location fixes are free and unlimited. Structural layout and palette regenerations consume 1 credit.
                 </p>
 
                 {/* Edit Form */}
@@ -558,9 +608,9 @@ export default function PackPage({ params }: { params: Promise<{ id: string }> }
                   <div className="flex flex-wrap gap-1.5">
                     {[
                       "Change date to Oct 12",
-                      "Make headline larger",
+                      "Update time to 7:00 PM",
                       "Update CTA to Register Now",
-                      "Change title to Special Promotion",
+                      "Recompose with bolder layout",
                     ].map((chip, idx) => (
                       <button
                         key={idx}
@@ -579,27 +629,36 @@ export default function PackPage({ params }: { params: Promise<{ id: string }> }
                     disabled={interpretingEdit || applyingEdit || !editInstruction.trim()}
                     className="btn-primary w-full py-3 text-xs font-bold shadow-amber-500/20 cursor-pointer disabled:opacity-50"
                   >
-                    {interpretingEdit ? "Interpreting change..." : "Review & Apply Change"}
+                    {interpretingEdit ? "Classifying change..." : "Review & Apply Change"}
                   </button>
                 </form>
 
                 {/* Step 2: Edit Confirmation Modal / Box */}
                 {pendingPatch && (
                   <div className="mt-6 pt-5 border-t border-white/10 animate-fade-in">
-                    <div className="glass-panel p-4 rounded-2xl border-amber-400/30 bg-amber-500/[0.03] space-y-3">
+                    <div className={`glass-panel p-4 rounded-2xl border space-y-3 ${
+                      pendingPatch.isFree ? "border-emerald-400/30 bg-emerald-500/[0.03]" : "border-amber-400/30 bg-amber-500/[0.03]"
+                    }`}>
                       <div className="flex items-center justify-between">
-                        <span className="text-xs font-bold text-amber-400 uppercase tracking-wider">
+                        <span className="text-xs font-bold uppercase tracking-wider text-white">
                           Proposed Changes:
                         </span>
-                        <span className="text-[10px] bg-amber-400/10 text-amber-300 px-2 py-0.5 rounded font-mono font-bold">
-                          Cost: {pendingPatch.creditCost} Credit
+                        <span className={`text-[10px] px-2 py-0.5 rounded font-mono font-bold ${
+                          pendingPatch.isFree ? "bg-emerald-400/10 text-emerald-300" : "bg-amber-400/10 text-amber-300"
+                        }`}>
+                          {pendingPatch.isFree ? "FREE (0 Credits)" : `Cost: ${pendingPatch.creditCost} Credit`}
                         </span>
                       </div>
                       <p className="text-xs text-zinc-200">
                         ✓ {pendingPatch.summary}
                       </p>
+                      {pendingPatch.reason && (
+                        <p className="text-[11px] text-zinc-400">
+                          Classification: {pendingPatch.reason}
+                        </p>
+                      )}
 
-                      {wallet && wallet.balance < pendingPatch.creditCost ? (
+                      {!pendingPatch.isFree && wallet && wallet.balance < pendingPatch.creditCost ? (
                         <div className="pt-2">
                           <p className="text-xs text-red-400 font-semibold mb-2">
                             You don&apos;t have enough credits (Balance: {wallet.balance}).
@@ -619,9 +678,15 @@ export default function PackPage({ params }: { params: Promise<{ id: string }> }
                             id="confirm-edit-button"
                             onClick={handleApplyConfirmedEdit}
                             disabled={applyingEdit}
-                            className="btn-primary flex-1 py-2.5 text-xs font-bold cursor-pointer"
+                            className={`flex-1 py-2.5 text-xs font-bold cursor-pointer rounded-xl transition-all shadow-lg ${
+                              pendingPatch.isFree ? "bg-emerald-500 hover:bg-emerald-400 text-black shadow-emerald-500/20" : "btn-primary"
+                            }`}
                           >
-                            {applyingEdit ? "Regenerating pack..." : "Confirm & Regenerate (1 Credit)"}
+                            {applyingEdit
+                              ? "Applying change..."
+                              : pendingPatch.isFree
+                                ? "Confirm & Apply Change (Free - 0 Credits)"
+                                : `Confirm & Regenerate (${pendingPatch.creditCost} Credit)`}
                           </button>
                           <button
                             type="button"
@@ -636,6 +701,42 @@ export default function PackPage({ params }: { params: Promise<{ id: string }> }
                     </div>
                   </div>
                 )}
+
+                {/* Photo Swap Section (D-04) */}
+                <div className="mt-8 pt-6 border-t border-white/10">
+                  <div className="flex items-center justify-between mb-2">
+                    <h3 className="text-sm font-bold text-white flex items-center gap-2">
+                      <span>Swap Subject Photo</span>
+                      <span className="text-[10px] bg-white/10 text-zinc-300 px-2 py-0.5 rounded">Included Free</span>
+                    </h3>
+                    <span className="text-[11px] text-zinc-400">PNG, JPG, WebP (&lt;10MB)</span>
+                  </div>
+                  <p className="text-xs text-zinc-400 mb-4">
+                    Replace the subject photo in this pack with a new high-resolution photo.
+                  </p>
+
+                  <form onSubmit={handlePhotoSwap} className="space-y-3">
+                    <div className="flex flex-col sm:flex-row items-center gap-3">
+                      <input
+                        type="file"
+                        accept="image/png,image/jpeg,image/webp"
+                        id="photo-swap-input"
+                        onChange={(e) => setPhotoFile(e.target.files?.[0] || null)}
+                        disabled={photoUploading}
+                        className="file:mr-4 file:py-2 file:px-4 file:rounded-xl file:border-0 file:text-xs file:font-semibold file:bg-white/10 file:text-white hover:file:bg-white/20 text-xs text-zinc-400 w-full"
+                      />
+                      <button
+                        type="submit"
+                        id="photo-swap-submit-button"
+                        disabled={photoUploading || !photoFile}
+                        className="btn-secondary whitespace-nowrap text-xs py-2 px-5 font-bold cursor-pointer disabled:opacity-40"
+                      >
+                        {photoUploading ? "Uploading..." : "Upload & Swap Photo"}
+                      </button>
+                    </div>
+                    {photoError && <p className="text-xs text-red-400">{photoError}</p>}
+                  </form>
+                </div>
               </div>
 
               {/* Version History Timeline (D-04) */}

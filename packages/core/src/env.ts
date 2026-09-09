@@ -48,6 +48,9 @@ const EnvSchema = z.object({
   // Commerce & Payments (D-02, D-03, D-06)
   APP_URL: z.string().default("http://localhost:3000"),
   PAYMENT_PROVIDER: z.enum(["stripe", "dev", "paystack", "flutterwave"]).default("dev"),
+  ENABLE_LIVE_PAYMENTS: z.coerce.boolean().default(false),
+  DEV_PAYMENT_OVERRIDE: z.coerce.boolean().default(false),
+  ENABLE_AUTO_REFUNDS: z.coerce.boolean().default(false),
   STRIPE_SECRET_KEY: z.string().optional(),
   STRIPE_WEBHOOK_SECRET: z.string().optional(),
   PAYSTACK_SECRET_KEY: z.string().optional(),
@@ -56,6 +59,14 @@ const EnvSchema = z.object({
   FLUTTERWAVE_WEBHOOK_SECRET: z.string().optional(),
   PACK_PRICE_CENTS: z.coerce.number().int().default(299),
   BUNDLE_PRICE_CENTS: z.coerce.number().int().default(999),
+
+  // Feature Flags & Extensions
+  ENABLE_PHOTO_SWAPPING: z.coerce.boolean().default(true),
+  ENABLE_VISION_SERVICE: z.coerce.boolean().default(false),
+  VISION_SERVICE_SECRET: z.string().default("gdp_vision_dev_secret"),
+  VQS_VERSION: z.string().default("1.1"),
+  VQS_BLOCKING_MODE: z.coerce.boolean().default(false),
+  VQS_EXPERIMENTAL_CHECKS: z.coerce.boolean().default(false),
 });
 
 export type Env = z.infer<typeof EnvSchema>;

@@ -16,7 +16,13 @@ const log = createLogger("packaging-service");
 export class PackagingService {
   async packagePack(
     packId: string,
-    options?: { versionNumber?: number; label?: string; parentVersionId?: string; patch?: any },
+    options?: {
+      versionNumber?: number;
+      label?: string;
+      parentVersionId?: string;
+      patch?: any;
+      editCategory?: string;
+    },
   ): Promise<Pack> {
     const pack = await packRepository.getPack(packId);
     if (!pack) throw new Error(`Pack ${packId} not found`);
@@ -151,6 +157,7 @@ export class PackagingService {
       label,
       document: stored.doc,
       patch: options?.patch,
+      editCategory: options?.editCategory,
       previewKey: stored.preview.previewUrl,
       downloadKey,
       downloadUrl: `/api/packs/${packId}/download?version=${versionNumber}`,

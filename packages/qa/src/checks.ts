@@ -128,7 +128,7 @@ export function checkTypography(doc: DesignDocument): ComponentScore {
 
 // ------------------------------------------------------------- composition
 
-export function checkComposition(doc: DesignDocument): ComponentScore {
+export function checkComposition(doc: DesignDocument, ctx: QaContext = {}): ComponentScore {
   const issues: QaIssue[] = [];
   const box = contentBox(doc.canvas);
   const visible = doc.layers.filter((l) => l.visible && l.slot !== "background" && l.slot !== "texture" && l.slot !== "overlay");
@@ -211,11 +211,14 @@ export function checkComposition(doc: DesignDocument): ComponentScore {
   const hasImagery = doc.layers.some((l) => l.visible && l.type === "image" && l.slot !== "logo");
   const floor = hasImagery ? 0.22 : 0.13;
   if (coverage < floor) {
+    const isCritical = coverage < 0.08;
+    const severity = ctx.blockingMode && isCritical ? "error" : "warn";
+    const penalty = isCritical ? Math.min(50, (floor - coverage) * 220 + 20) : (floor - coverage) * 160;
     issues.push({
       code: "sparse",
-      severity: "warn",
-      message: `only ${Math.round(coverage * 100)}% of the canvas carries content`,
-      penalty: (floor - coverage) * 160,
+      severity,
+      message: `only ${Math.round(coverage * 100)}% of the canvas carries content (floor is ${Math.round(floor * 100)}%)`,
+      penalty,
     });
   }
   if (coverage > 0.82) {
@@ -322,7 +325,7 @@ function weightBalance(doc: DesignDocument): { horizontal: number; vertical: num
   return { horizontal: h, vertical: v };
 }
 
-function inkCoverage(doc: DesignDocument): number {
+export function inkCoverage(doc: DesignDocument): number {
   const canvasArea = doc.canvas.width * doc.canvas.height;
   let covered = 0;
   for (const layer of doc.layers) {

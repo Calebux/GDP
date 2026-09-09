@@ -291,6 +291,7 @@ export const packs = pgTable(
     selectedConceptId: text("selected_concept_id"),
     requestedFormats: jsonb("requested_formats").notNull().default(sql`'[]'::jsonb`),
     downloadKey: text("download_key"),
+    packDefinitionVersion: text("pack_definition_version").default("1.0"),
     createdAt: createdAt(),
     updatedAt: updatedAt(),
   },
@@ -306,6 +307,8 @@ export const packConcepts = pgTable(
     description: text("description").notNull().default(""),
     visualDirection: text("visual_direction").notNull().default(""),
     vqs: real("vqs").notNull().default(0),
+    vqsVersion: text("vqs_version").default("1.0"),
+    vqsReport: jsonb("vqs_report"),
     document: jsonb("document").notNull(),
     previewKey: text("preview_key").notNull(),
     thumbnailKey: text("thumbnail_key").notNull(),
@@ -328,6 +331,11 @@ export const orders = pgTable(
     provider: text("provider").notNull().default("stripe"),
     providerSessionId: text("provider_session_id").notNull().default(""),
     status: text("status").notNull().default("pending"),
+    refundStatus: text("refund_status").default("none"),
+    refundReason: text("refund_reason"),
+    refundedAt: timestamp("refunded_at", { withTimezone: true }),
+    refundAmount: integer("refund_amount").default(0),
+    packDefinitionVersion: text("pack_definition_version").default("1.0"),
     createdAt: createdAt(),
     updatedAt: updatedAt(),
   },
@@ -386,7 +394,7 @@ export const creditTransactions = pgTable(
   ],
 );
 
-// ------------------------------------------------------------- D-04 Pack Versions
+// ------------------------------------------------------------- D-04 Pack Versions & Post-Purchase Uploads
 
 export const packVersions = pgTable(
   "pack_versions",
@@ -399,6 +407,7 @@ export const packVersions = pgTable(
     label: text("label").notNull().default(""),
     document: jsonb("document").notNull(),
     patch: jsonb("patch"),
+    editCategory: text("edit_category"), // TEXT_CORRECTION | DATE_TIME_CORRECTION | PHOTO_SWAP | STRUCTURAL_REGENERATION | CREATIVE_REGENERATION
     previewKey: text("preview_key").notNull(),
     downloadKey: text("download_key"),
     createdAt: createdAt(),
@@ -409,7 +418,25 @@ export const packVersions = pgTable(
   ],
 );
 
-// ------------------------------------------------------------- D-05 Pack Shares & Referrals
+export const packAssets = pgTable(
+  "pack_assets",
+  {
+    id: id(),
+    packId: text("pack_id").notNull().references(() => packs.id, { onDelete: "cascade" }),
+    userId: text("user_id"),
+    kind: text("kind").notNull().default("subject_photo"), // subject_photo | logo
+    storageKey: text("storage_key").notNull(),
+    originalFilename: text("original_filename").default(""),
+    mimeType: text("mime_type").notNull(),
+    bytes: integer("bytes").notNull().default(0),
+    width: integer("width").notNull().default(0),
+    height: integer("height").notNull().default(0),
+    createdAt: createdAt(),
+  },
+  (table) => [index("pack_assets_pack_idx").on(table.packId)],
+);
+
+// ------------------------------------------------------------- D-05 Pack Shares & Funnel Events
 
 export const packShares = pgTable(
   "pack_shares",
@@ -419,6 +446,7 @@ export const packShares = pgTable(
     conceptId: text("concept_id").notNull(),
     token: text("token").notNull().unique(),
     viewsCount: integer("views_count").notNull().default(0),
+    referralSource: text("referral_source").default(""),
     createdAt: createdAt(),
   },
   (table) => [
@@ -426,3 +454,152 @@ export const packShares = pgTable(
     index("pack_shares_pack_idx").on(table.packId),
   ],
 );
+
+export const analyticsEvents = pgTable(
+  "analytics_events",
+  {
+    id: id(),
+    eventName: text("event_name").notNull(),
+    sessionId: text("session_id"),
+    userId: text("user_id"),
+    packId: text("pack_id"),
+    conceptId: text("concept_id"),
+    shareToken: text("share_token"),
+    cohortId: text("cohort_id"),
+    referralSource: text("referral_source"),
+    metadata: jsonb("metadata").notNull().default(sql`'{}'::jsonb`),
+    createdAt: createdAt(),
+  },
+  (table) => [
+    index("analytics_event_name_idx").on(table.eventName),
+    index("analytics_pack_idx").on(table.packId),
+    index("analytics_cohort_idx").on(table.cohortId),
+    index("analytics_created_idx").on(table.createdAt),
+  ],
+);
+
+// ------------------------------------------------------------- VQS Blind Designer Experiment
+
+export const vqsExperiments = pgTable(
+  "vqs_experiments",
+  {
+    id: id(),
+    title: text("title").notNull(),
+    description: text("description").notNull().default(""),
+    vqsVersion: text("vqs_version").notNull().default("1.1"),
+    status: text("status").notNull().default("active"), // active | closed
+    targetSampleSize: integer("target_sample_size").notNull().default(50),
+    createdAt: createdAt(),
+    updatedAt: updatedAt(),
+  },
+  (table) => [index("vqs_exp_status_idx").on(table.status)],
+);
+
+export const vqsExperimentSamples = pgTable(
+  "vqs_experiment_samples",
+  {
+    id: id(),
+    experimentId: text("experiment_id").notNull().references(() => vqsExperiments.id, { onDelete: "cascade" }),
+    packId: text("pack_id").notNull(),
+    conceptId: text("concept_id").notNull(),
+    previewKey: text("preview_key").notNull(),
+    previewUrl: text("preview_url").notNull(),
+    vqsScore: real("vqs_score").notNull(),
+    vqsReport: jsonb("vqs_report"),
+    vqsVersion: text("vqs_version").notNull().default("1.1"),
+    randomOrderWeight: real("random_order_weight").notNull().default(0),
+    createdAt: createdAt(),
+  },
+  (table) => [index("vqs_samples_exp_idx").on(table.experimentId)],
+);
+
+export const vqsExperimentRaters = pgTable(
+  "vqs_experiment_raters",
+  {
+    id: id(),
+    experimentId: text("experiment_id").notNull().references(() => vqsExperiments.id, { onDelete: "cascade" }),
+    raterToken: text("rater_token").notNull().unique(),
+    pseudonym: text("pseudonym").notNull(),
+    experienceYears: integer("experience_years").default(0),
+    isProfessionalDesigner: boolean("is_professional_designer").default(true),
+    consentGivenAt: timestamp("consent_given_at", { withTimezone: true }),
+    completedAt: timestamp("completed_at", { withTimezone: true }),
+    createdAt: createdAt(),
+  },
+  (table) => [
+    uniqueIndex("vqs_raters_token_idx").on(table.raterToken),
+    index("vqs_raters_exp_idx").on(table.experimentId),
+  ],
+);
+
+export const vqsExperimentRatings = pgTable(
+  "vqs_experiment_ratings",
+  {
+    id: id(),
+    experimentId: text("experiment_id").notNull().references(() => vqsExperiments.id, { onDelete: "cascade" }),
+    sampleId: text("sample_id").notNull().references(() => vqsExperimentSamples.id, { onDelete: "cascade" }),
+    raterId: text("rater_id").notNull().references(() => vqsExperimentRaters.id, { onDelete: "cascade" }),
+    visualQuality: integer("visual_quality").notNull(), // 1 to 5
+    professionalism: integer("professionalism").notNull(), // 1 to 5
+    clarity: integer("clarity").notNull(), // 1 to 5
+    likelihoodToUse: integer("likelihood_to_use").notNull(), // 1 to 5
+    willingnessToPayBracket: text("willingness_to_pay_bracket").notNull(), // "0", "1-3", "3-5", "5-10", "10+"
+    qualitativeFeedback: text("qualitative_feedback").default(""),
+    durationMs: integer("duration_ms").default(0),
+    createdAt: createdAt(),
+  },
+  (table) => [
+    index("vqs_ratings_exp_idx").on(table.experimentId),
+    index("vqs_ratings_sample_idx").on(table.sampleId),
+    index("vqs_ratings_rater_idx").on(table.raterId),
+    uniqueIndex("vqs_ratings_rater_sample_idx").on(table.raterId, table.sampleId),
+  ],
+);
+
+// ------------------------------------------------------------- Vision Service COGS & Metering
+
+export const visionMetering = pgTable(
+  "vision_metering",
+  {
+    id: id(),
+    packId: text("pack_id"),
+    editId: text("edit_id"),
+    versionNumber: integer("version_number"),
+    provider: text("provider").notNull().default("fastapi_rembg"), // fastapi_rembg | hosted_api | mock
+    model: text("model").notNull().default("u2net"),
+    operationType: text("operation_type").notNull(), // cutout | analysis
+    inputBytes: integer("input_bytes").notNull().default(0),
+    outputBytes: integer("output_bytes").notNull().default(0),
+    durationMs: integer("duration_ms").notNull().default(0),
+    success: boolean("success").notNull().default(true),
+    estimatedCostUsd: real("estimated_cost_usd").notNull().default(0),
+    actualCostUsd: real("actual_cost_usd"),
+    currency: text("currency").notNull().default("usd"),
+    pricingVersion: text("pricing_version").notNull().default("2026.1"),
+    error: text("error"),
+    createdAt: createdAt(),
+  },
+  (table) => [
+    index("vision_metering_pack_idx").on(table.packId),
+    index("vision_metering_created_idx").on(table.createdAt),
+  ],
+);
+
+// ------------------------------------------------------------- D-06 Webhook Idempotency
+
+export const processedWebhooks = pgTable(
+  "processed_webhooks",
+  {
+    id: id(),
+    provider: text("provider").notNull(), // stripe | paystack | flutterwave
+    eventId: text("event_id").notNull(),
+    eventType: text("event_type").notNull(),
+    orderId: text("order_id"),
+    processedAt: createdAt(),
+  },
+  (table) => [
+    uniqueIndex("webhook_provider_event_idx").on(table.provider, table.eventId),
+    index("webhook_order_idx").on(table.orderId),
+  ],
+);
+

@@ -17,7 +17,18 @@ export type IdPrefix =
   | "evt"
   | "wal"
   | "ctx"
-  | "shr";
+  | "shr"
+  | "vqs"
+  | "smpl"
+  | "s"
+  | "sec"
+  | "r"
+  | "rt"
+  | "rating"
+  | "wh"
+  | "vis"
+  | "photo"
+  | (string & {});
 
 const ALPHABET = "0123456789abcdefghijklmnopqrstuvwxyz";
 

@@ -24,6 +24,8 @@ import {
   creditTransactions,
   packVersions,
   packShares,
+  packAssets,
+  processedWebhooks,
 } from "@gdp/db";
 import { eq, desc, and } from "drizzle-orm";
 
@@ -58,6 +60,7 @@ const memoryWallets = new Map<string, CreditWallet>();
 const memoryTransactions = new Map<string, CreditTransaction>();
 const memoryVersions = new Map<string, PackVersion[]>();
 const memoryShares = new Map<string, PackShare>();
+const memoryProcessedWebhooks = new Set<string>();
 
 export class PackRepository {
   async savePack(pack: Pack, concepts: StoredConcept[]): Promise<void> {
@@ -645,7 +648,7 @@ export class PackRepository {
 
   // ------------------------------------------------------------- D-04 Pack Versions
 
-  async savePackVersion(version: PackVersion): Promise<void> {
+  async savePackVersion(version: PackVersion & { editCategory?: string }): Promise<void> {
     const current = memoryVersions.get(version.packId) || [];
     current.push(version);
     memoryVersions.set(version.packId, current);
@@ -662,12 +665,46 @@ export class PackRepository {
           label: version.label,
           document: version.document,
           patch: version.patch ?? null,
+          editCategory: version.editCategory ?? null,
           previewKey: version.previewKey,
           downloadKey: version.downloadKey ?? null,
           createdAt: new Date(version.createdAt),
         });
       } catch (err) {
         log.warn("Error saving pack version to PostgreSQL", { error: String(err) });
+      }
+    }
+  }
+
+  async savePackAsset(asset: {
+    id: string;
+    packId: string;
+    userId?: string;
+    kind?: string;
+    storageKey: string;
+    originalFilename?: string;
+    mimeType: string;
+    bytes: number;
+    width?: number;
+    height?: number;
+  }): Promise<void> {
+    if (await dbAvailable()) {
+      try {
+        const database = db();
+        await database.insert(packAssets).values({
+          id: asset.id,
+          packId: asset.packId,
+          userId: asset.userId ?? null,
+          kind: asset.kind ?? "subject_photo",
+          storageKey: asset.storageKey,
+          originalFilename: asset.originalFilename ?? "",
+          mimeType: asset.mimeType,
+          bytes: asset.bytes,
+          width: asset.width ?? 0,
+          height: asset.height ?? 0,
+        });
+      } catch (err) {
+        log.warn("Error saving pack asset to PostgreSQL", { error: String(err) });
       }
     }
   }
@@ -782,6 +819,84 @@ export class PackRepository {
         log.warn("Error incrementing share views in PostgreSQL", { error: String(err) });
       }
     }
+  }
+
+  // ------------------------------------------------------- D-06 Webhook Idempotency & Reconciliation
+
+  async isWebhookProcessed(eventId: string): Promise<boolean> {
+    if (memoryProcessedWebhooks.has(eventId)) return true;
+    if (await dbAvailable()) {
+      try {
+        const database = db();
+        const rows = await database
+          .select()
+          .from(processedWebhooks)
+          .where(eq(processedWebhooks.eventId, eventId))
+          .limit(1);
+        return rows.length > 0;
+      } catch (err) {
+        log.warn("Error checking processed webhook in PostgreSQL", { error: String(err) });
+      }
+    }
+    return false;
+  }
+
+  async recordProcessedWebhook(provider: string, eventId: string, eventType?: string, payload?: any): Promise<boolean> {
+    if (await this.isWebhookProcessed(eventId)) {
+      return false; // Already processed
+    }
+    memoryProcessedWebhooks.add(eventId);
+
+    if (await dbAvailable()) {
+      try {
+        const database = db();
+        await database.insert(processedWebhooks).values({
+          id: `pwh_${newId("wh")}`,
+          provider,
+          eventId,
+          eventType: eventType ?? "payment.success",
+          orderId: payload?.orderId ?? null,
+          processedAt: new Date(),
+        });
+      } catch (err) {
+        log.warn("Error recording processed webhook in PostgreSQL", { error: String(err) });
+      }
+    }
+    return true;
+  }
+
+  async getAllOrders(): Promise<PackOrder[]> {
+    const list: PackOrder[] = Array.from(memoryOrders.values());
+    if (await dbAvailable()) {
+      try {
+        const database = db();
+        const rows = await database.select().from(orders).orderBy(desc(orders.createdAt));
+        const dbOrders: PackOrder[] = rows.map((r) => ({
+          id: r.id,
+          packId: r.packId,
+          userId: r.userId ?? undefined,
+          productId: r.productId,
+          creditsGranted: r.creditsGranted,
+          amount: r.amount,
+          currency: r.currency,
+          provider: r.provider as PaymentProviderType,
+          providerSessionId: r.providerSessionId,
+          status: r.status as PackOrder["status"],
+          refundReason: (r as any).refundReason ?? undefined,
+          refundedAt: (r as any).refundedAt ? (r as any).refundedAt.toISOString() : undefined,
+          createdAt: r.createdAt.toISOString(),
+          updatedAt: r.updatedAt.toISOString(),
+        }));
+        const ids = new Set(dbOrders.map((o) => o.id));
+        for (const m of list) {
+          if (!ids.has(m.id)) dbOrders.push(m);
+        }
+        return dbOrders;
+      } catch (err) {
+        log.warn("Error getting all orders from PostgreSQL", { error: String(err) });
+      }
+    }
+    return list;
   }
 }
 

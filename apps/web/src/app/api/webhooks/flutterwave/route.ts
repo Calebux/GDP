@@ -21,6 +21,14 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: result.error || "Invalid webhook signature" }, { status: 400 });
     }
 
+    if (result.eventId) {
+      const isNew = await packRepository.recordProcessedWebhook("flutterwave", result.eventId, result.eventType);
+      if (!isNew) {
+        log.info("Duplicate Flutterwave webhook eventId skipped", { eventId: result.eventId });
+        return NextResponse.json({ received: true, duplicate: true });
+      }
+    }
+
     if (result.orderId && result.status === "paid") {
       const order = await packRepository.getOrder(result.orderId);
       if (order) {

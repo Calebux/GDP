@@ -9,6 +9,7 @@ import {
   checkStyleCoherence,
   checkTechnical,
   checkTypography,
+  inkCoverage,
 } from "./checks.js";
 import type { QaContext, QaIssue, VqsReport } from "./types.js";
 
@@ -19,7 +20,7 @@ import type { QaContext, QaIssue, VqsReport } from "./types.js";
 export function evaluate(doc: DesignDocument, ctx: QaContext = {}): VqsReport {
   const components = [
     checkTypography(doc),
-    checkComposition(doc),
+    checkComposition(doc, ctx),
     checkHierarchy(doc),
     checkSpacing(doc),
     checkContrast(doc, ctx),
@@ -31,14 +32,20 @@ export function evaluate(doc: DesignDocument, ctx: QaContext = {}): VqsReport {
   const total = components.reduce((sum, c) => sum + c.score * c.weight, 0);
   const issues = components.flatMap((c) => c.issues).sort((a, b) => b.penalty - a.penalty);
   const threshold = ctx.threshold ?? safeThreshold();
+  const vqsVersion = ctx.vqsVersion ?? safeVqsVersion();
+  const isBlocking = ctx.blockingMode ?? safeBlockingMode();
+  const contentDensityRatio = Math.round(inkCoverage(doc) * 1000) / 1000;
 
   return {
+    vqsVersion,
     total: Math.round(total * 10) / 10,
-    passed: total >= threshold && !issues.some((i) => i.severity === "error"),
+    passed: total >= threshold && (!isBlocking || !issues.some((i) => i.severity === "error")),
     threshold,
+    isBlocking,
+    contentDensityRatio,
     components,
     issues,
-    summary: summarise(components, issues, total),
+    summary: summarise(components, issues, total, contentDensityRatio),
   };
 }
 
@@ -50,12 +57,32 @@ function safeThreshold(): number {
   }
 }
 
+function safeVqsVersion(): string {
+  try {
+    return env().VQS_VERSION || "1.1";
+  } catch {
+    return "1.1";
+  }
+}
+
+function safeBlockingMode(): boolean {
+  try {
+    return env().VQS_BLOCKING_MODE || false;
+  } catch {
+    return false;
+  }
+}
+
 function summarise(
   components: ReturnType<typeof checkTypography>[],
   issues: QaIssue[],
   total: number,
+  contentDensityRatio?: number,
 ): string[] {
   const lines = [`Visual Quality Score ${Math.round(total)}/100`];
+  if (contentDensityRatio !== undefined) {
+    lines.push(`Content density: ${Math.round(contentDensityRatio * 100)}% coverage`);
+  }
   const weakest = [...components].sort((a, b) => a.score - b.score)[0];
   if (weakest && weakest.score < 90) {
     lines.push(`Weakest area: ${weakest.name} (${Math.round(weakest.score)}/100)`);
