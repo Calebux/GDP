@@ -15,7 +15,7 @@ import {
 } from "@gdp/design-schema";
 import { fallbackFor, isAvailable } from "@gdp/fonts";
 import { layoutText, minimumFontSize } from "@gdp/typography";
-import { composeDocument, documentToPlan, type AssetRefInfo } from "@gdp/layout-engine";
+import { assetsForDocument, composeDocument, documentToPlan, type AssetRefInfo } from "@gdp/layout-engine";
 import { structuredOrFallback } from "./llm.js";
 import { editorSystemPrompt, editorUserPrompt } from "./prompts.js";
 
@@ -119,9 +119,7 @@ function applyOp(doc: DesignDocument, op: DesignPatchOp, ctx: ApplyContext): OpR
       if (op.spacing) plan.dna.spacing = op.spacing;
       if (op.scaleContrast) plan.typography.scaleContrast = op.scaleContrast;
       if (op.density) plan.typography.density = op.density;
-      const assets: AssetRefInfo[] =
-        ctx.assets ??
-        doc.assetIds.map((id) => ({ id, ref: id, kind: "photo" as const, width: 1000, height: 1000 }));
+      const assets: AssetRefInfo[] = assetsForDocument(doc, ctx.assets);
       const { doc: composed } = composeDocument({
         id: doc.id,
         canvas: doc.canvas,

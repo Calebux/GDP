@@ -4,6 +4,7 @@ import {
   type CompositionArchetype,
   type DesignConceptPlan,
   type DesignDocument,
+  type AssetKind,
   type FormatId,
   type SlotPlan,
   isText,
@@ -57,12 +58,36 @@ function archetypeForAspect(archetype: CompositionArchetype, aspect: number): Co
   return archetype;
 }
 
+/** Emphasis the planner gives each role, for documents composed before plans were stored. */
+const DEFAULT_EMPHASIS: Partial<Record<SlotPlan["role"], number>> = {
+  eyebrow: 0.4,
+  headline: 0.95,
+  offer: 0.98,
+  "offer-detail": 0.5,
+  "promo-code": 0.5,
+  subheadline: 0.5,
+  body: 0.4,
+  date: 0.7,
+  time: 0.5,
+  location: 0.45,
+  cta: 0.55,
+  footer: 0.2,
+  logo: 0.3,
+  subject: 0.9,
+  "secondary-subject": 0.8,
+};
+
 /**
  * Rebuild a plan from a document. Text edits, palette changes and font swaps
  * live in the document, so a resize keeps everything the user changed while
- * letting the layout engine re-solve the geometry (§28).
+ * letting the layout engine re-solve the geometry (§28). Everything the
+ * document cannot express — emphasis, decoration, treatments, DNA — comes from
+ * the plan it was composed from.
  */
 export function documentToPlan(doc: DesignDocument): DesignConceptPlan {
+  const original = doc.meta.plan;
+  const emphasisOf = (role: SlotPlan["role"]): number =>
+    original?.slots.find((s) => s.role === role)?.emphasis ?? DEFAULT_EMPHASIS[role] ?? 0.5;
   const slots: SlotPlan[] = [];
 
   for (const layer of doc.layers) {
@@ -70,29 +95,34 @@ export function documentToPlan(doc: DesignDocument): DesignConceptPlan {
       slots.push({
         role: layer.slot,
         text: layer.content,
-        emphasis: 0.5,
+        emphasis: emphasisOf(layer.slot),
         styleKey: layer.slot,
         colorRole: colorRoleOf(doc, layer.color),
         notes: layer.intent ?? undefined,
       });
     } else if (layer.type === "image" && layer.slot !== "background") {
+      // Image slots are keyed by asset id; resizeDocument hands compose assets
+      // whose ref is that same id, so the lookup lands.
       slots.push({
         role: layer.slot,
         assetRef: layer.assetId,
-        emphasis: 0.6,
+        emphasis: emphasisOf(layer.slot),
         styleKey: "body",
         colorRole: "ink",
       });
     }
   }
 
-  const headline = doc.layers.find((l) => isText(l) && l.slot === "headline");
-  const support = doc.layers.find((l) => isText(l) && l.slot !== "headline");
+  // A promotion's dominant line is the offer, not a headline — read the display
+  // face from whichever one carries it.
+  const texts = doc.layers.filter(isText);
+  const headline = texts.find((l) => l.slot === "offer") ?? texts.find((l) => l.slot === "headline");
+  const support = texts.find((l) => l.id !== headline?.id && l.slot !== "eyebrow") ?? texts.find((l) => l.id !== headline?.id);
 
   return {
-    conceptName: doc.meta.title,
+    conceptName: original?.conceptName ?? doc.meta.title,
     rationale: doc.meta.notes,
-    archetype: (doc.meta.composition as CompositionArchetype) || "portrait-right-headline-left",
+    archetype: (doc.meta.composition as CompositionArchetype) || original?.archetype || "portrait-right-headline-left",
     background: backgroundPlanFrom(doc),
     palette: {
       name: doc.palette.name,
@@ -104,22 +134,60 @@ export function documentToPlan(doc: DesignDocument): DesignConceptPlan {
       ...(doc.palette.accentAlt ? { accentAlt: doc.palette.accentAlt } : {}),
     },
     typography: {
-      headlineFont: (headline && isText(headline) ? headline.fontFamily : undefined) ?? "Archivo Black",
-      supportFont: (support && isText(support) ? support.fontFamily : undefined) ?? "Inter",
-      headlineCase: (headline && isText(headline) ? headline.transform : "uppercase") as
+      ...(original?.typography ?? { scaleContrast: 2.6, density: "balanced" as const }),
+      headlineFont: headline?.fontFamily ?? original?.typography.headlineFont ?? "Archivo Black",
+      supportFont: support?.fontFamily ?? original?.typography.supportFont ?? "Inter",
+      headlineCase: (headline?.transform ?? original?.typography.headlineCase ?? "uppercase") as
         | "none"
         | "uppercase"
         | "capitalize",
-      headlineTracking: headline && isText(headline) ? headline.letterSpacing : -0.02,
-      headlineAlign: (headline && isText(headline) ? headline.align : "left") as "left" | "center" | "right",
-      scaleContrast: 2.6,
-      density: "balanced",
+      headlineTracking: headline?.letterSpacing ?? original?.typography.headlineTracking ?? -0.02,
+      headlineAlign: (headline?.align ?? original?.typography.headlineAlign ?? "left") as "left" | "center" | "right",
     },
-    dna: { energy: 0.6, minimalism: 0.5, contrast: 0.8, spacing: "balanced" },
+    dna: original?.dna ?? { energy: 0.6, minimalism: 0.5, contrast: 0.8, spacing: "balanced" },
     slots,
-    decorations: [],
-    subjectTreatment: [],
+    decorations: original?.decorations ?? [],
+    subjectTreatment: original?.subjectTreatment ?? [],
   };
+}
+
+const KIND_FOR_SLOT: Partial<Record<string, AssetKind>> = {
+  logo: "logo",
+  subject: "portrait",
+  "secondary-subject": "portrait",
+  background: "photo",
+};
+
+/**
+ * The assets a document's image layers need, keyed so that `ref === id` — the
+ * form documentToPlan writes. Caller-supplied facts (true size, cutout,
+ * analysis) win; otherwise they are recovered from the layer itself, which is
+ * enough to keep a photo or logo in the pack rather than silently dropping it.
+ */
+export function assetsForDocument(doc: DesignDocument, supplied: AssetRefInfo[] = []): AssetRefInfo[] {
+  const byId = new Map(supplied.map((a) => [a.id, a]));
+  const out = new Map<string, AssetRefInfo>();
+  for (const layer of doc.layers) {
+    if (layer.type !== "image" || out.has(layer.assetId)) continue;
+    const known = byId.get(layer.assetId);
+    out.set(
+      layer.assetId,
+      known
+        ? { ...known, ref: layer.assetId }
+        : {
+            id: layer.assetId,
+            ref: layer.assetId,
+            kind: KIND_FOR_SLOT[layer.slot] ?? "photo",
+            // Contained images were fitted at their native aspect, so the drawn
+            // box carries it; full-bleed covers are cropped and cover again.
+            width: Math.max(1, layer.width),
+            height: Math.max(1, layer.height),
+            cutout: layer.maskAssetId !== null,
+            analysis: undefined,
+          },
+    );
+  }
+  return [...out.values()];
 }
 
 function colorRoleOf(doc: DesignDocument, color: string): SlotPlan["colorRole"] {
@@ -177,7 +245,7 @@ export function resizeDocument(input: ResizeInput): DesignDocument {
     id: input.id ?? `${input.doc.id}_${input.format}`,
     canvas: target,
     plan,
-    assets: input.assets,
+    assets: assetsForDocument(input.doc, input.assets),
     meta: { ...input.doc.meta, composition: plan.archetype },
   });
   return doc;

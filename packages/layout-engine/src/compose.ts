@@ -257,7 +257,9 @@ export function composeDocument(input: ComposeInput): ComposeResult {
           slot: "footer",
           rect: {
             x: composedRegions.footer.x,
-            y: composedRegions.footer.y,
+            // Sit on the bottom margin. Hanging from the top of the region left
+            // a strip of nothing between the footer and the canvas edge.
+            y: composedRegions.footer.y + Math.max(0, composedRegions.footer.height - layout.height),
             width: composedRegions.footer.width,
             height: layout.height,
           },
@@ -301,7 +303,7 @@ export function composeDocument(input: ComposeInput): ComposeResult {
     assetIds: input.assets.map((a) => a.id),
     meta: {
       title: input.meta?.title ?? plan.conceptName,
-      category: input.meta?.category ?? "church",
+      category: input.meta?.category ?? "smb",
       subcategory: input.meta?.subcategory ?? "",
       styleDirection: input.meta?.styleDirection ?? "",
       composition: archetype,
@@ -309,6 +311,7 @@ export function composeDocument(input: ComposeInput): ComposeResult {
       plannerModel: input.meta?.plannerModel ?? "",
       createdAt: input.meta?.createdAt ?? new Date().toISOString(),
       notes: input.meta?.notes ?? plan.rationale,
+      plan,
     },
   };
 
@@ -579,6 +582,8 @@ function buildTextStack(input: StackInput): Layer[] {
     }
   }
 
+  if (regions.fillStack) blocks = distributeSlack(blocks, stack.height);
+
   const total = stackHeight(blocks);
   let cursorY =
     regions.stackAnchor === "top"
@@ -590,16 +595,19 @@ function buildTextStack(input: StackInput): Layer[] {
 
   const out: Layer[] = [];
   let inlineX = stack.x;
-  let inlineRowTop = cursorY;
+  let inlineRowBaseline = cursorY;
   let z = 14;
 
   for (const block of blocks) {
     if (block.inline) {
       const width = measuredWidth(block.layer);
+      // Share the first line's baseline with the block that opened the row:
+      // "SEP 13  9:00 AM  LEKKI" set at three sizes must still sit on one line.
+      const y = inlineRowBaseline - firstBaseline(block.layer);
       const layer: TextLayer = {
         ...block.layer,
         x: px(inlineX),
-        y: px(inlineRowTop),
+        y: px(y),
         width: px(width),
         align: "left",
         zIndex: z++,
@@ -621,11 +629,52 @@ function buildTextStack(input: StackInput): Layer[] {
     out.push(layer);
 
     // Start of a potential inline row: remember where it began.
-    inlineRowTop = cursorY;
+    inlineRowBaseline = cursorY + firstBaseline(layer);
     inlineX = stack.x + measuredWidth(layer) + canvas.baselineUnit * SPACING_MULTIPLIER[plan.dna.spacing] * 3;
     cursorY += layer.height;
   }
 
+  return out;
+}
+
+function firstBaseline(layer: TextLayer): number {
+  return layer.lines[0]?.baseline ?? layer.fontSize * 0.8;
+}
+
+/**
+ * When the type runs out of width before it runs out of height, the leftover
+ * height must not pool into one dead band. Give it back as rhythm: most of it
+ * to the break between the message (eyebrow → offer → detail) and the
+ * information (date, time, place, call to action), the rest spread across the
+ * other gaps — each capped, so a sparse poster opens up rather than falls apart.
+ */
+function distributeSlack(blocks: Block[], available: number): Block[] {
+  const stacked = blocks.filter((b) => !b.inline);
+  if (stacked.length < 3) return blocks;
+  // Keep some of the slack as margin, so the stack still breathes at its ends.
+  const slack = (available - stackHeight(blocks)) * 0.7;
+  if (slack <= 1) return blocks;
+
+  const breakIndex = blocks.findIndex(
+    (b, i) => i > 0 && !b.inline && (DETAIL_ROLES.includes(b.role) || b.role === "cta"),
+  );
+  const out = blocks.map((b) => ({ ...b }));
+  let remaining = slack;
+
+  if (breakIndex > 0) {
+    const share = Math.min(remaining * 0.55, available * 0.16);
+    out[breakIndex]!.gapBefore += share;
+    remaining -= share;
+  }
+
+  const growable = out.filter((b, i) => i > 0 && !b.inline && i !== breakIndex && b.gapBefore > 0);
+  const totalGap = growable.reduce((sum, b) => sum + b.gapBefore, 0);
+  if (totalGap > 0) {
+    for (const block of growable) {
+      // A gap may at most double; beyond that elements stop reading as a group.
+      block.gapBefore += Math.min(block.gapBefore, remaining * (block.gapBefore / totalGap));
+    }
+  }
   return out;
 }
 

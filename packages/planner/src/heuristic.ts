@@ -252,7 +252,9 @@ function rationaleFor(direction: StyleDirection, archetype: CompositionArchetype
   return [
     `${direction.description}`,
     `Composition: ${pretty(archetype).toLowerCase()}${subject ? `, anchored on ${subject}` : ""}.`,
-    `Hierarchy leads with the event name, then date, then venue.`,
+    extractOffer(brief).offer
+      ? `Hierarchy leads with the offer, framed by the occasion, then date and venue.`
+      : `Hierarchy leads with the event name, then date, then venue.`,
   ].join(" ");
 }
 

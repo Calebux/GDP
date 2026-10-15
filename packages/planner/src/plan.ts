@@ -31,9 +31,15 @@ export interface PlanResult {
   direction: StyleDirection;
 }
 
-function briefText(brief: DesignBrief): string {
+export function briefText(brief: DesignBrief): string {
   const rows: Array<[string, string]> = [
     ["type", `${brief.category} / ${brief.subcategory}`],
+    ["business type", brief.businessType],
+    // The offer is the message on a promotion — the model must see it, or it
+    // plans an event poster around the occasion and the deal disappears.
+    ["offer", brief.offer],
+    ["offer detail", brief.offerDetail],
+    ["promo code", brief.promoCode],
     ["event title", brief.eventTitle],
     ["series", brief.seriesName],
     ["organisation", brief.organisationName],

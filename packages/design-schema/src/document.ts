@@ -1,6 +1,7 @@
 import { z } from "zod";
 import { HexColor, Paint, SlotRole } from "./primitives.js";
 import { Layer } from "./layers.js";
+import { DesignConceptPlan } from "./plan.js";
 
 /** Output formats (§28). Every format knows its own safe areas. */
 export const FORMATS = {
@@ -76,7 +77,7 @@ export type TypeScale = z.infer<typeof TypeScale>;
 
 export const DesignMeta = z.object({
   title: z.string().default("Untitled design"),
-  category: z.string().default("church"),
+  category: z.string().default("smb"),
   subcategory: z.string().default(""),
   styleDirection: z.string().default(""),
   /** Composition archetype the layout engine used (§10 "Composition"). */
@@ -86,6 +87,12 @@ export const DesignMeta = z.object({
   plannerModel: z.string().default(""),
   createdAt: z.string().default(() => new Date().toISOString()),
   notes: z.string().default(""),
+  /**
+   * The concept this document was composed from. Resizes and recomposes start
+   * from it so hierarchy, decoration and treatments survive (§28); text,
+   * palette and fonts are still read back from the layers, where edits live.
+   */
+  plan: DesignConceptPlan.optional(),
 });
 export type DesignMeta = z.infer<typeof DesignMeta>;
 

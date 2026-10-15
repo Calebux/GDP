@@ -3,9 +3,10 @@ import { FormatId } from "./document.js";
 
 /** §5 — the short conversational brief, normalised. */
 export const DesignBrief = z.object({
-  category: z.string().default("church"),
-  /** e.g. "sunday-service", "conference", "worship-night" */
-  subcategory: z.string().default("sunday-service"),
+  /** "smb" by default (D-17); "church" keeps the original vertical reachable. */
+  category: z.string().default("smb"),
+  /** e.g. "promotion", "grand-opening", "sunday-service" */
+  subcategory: z.string().default("promotion"),
   /** The occasion: "Valentine's Special", "Grand Opening", "Black Friday". */
   eventTitle: z.string().max(120).default(""),
   /** The promotion itself. For a promo this, not the occasion, is the message. */

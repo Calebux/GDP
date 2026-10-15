@@ -49,7 +49,9 @@ export function checkTypography(doc: DesignDocument): ComponentScore {
     });
   }
 
-  const minSize = Math.max(14, Math.min(doc.canvas.width, doc.canvas.height) * 0.0115);
+  // Same rounding as typography's minimumFontSize(), so text the engine set at
+  // exactly its floor is not then failed for sitting a fraction of a pixel under it.
+  const minSize = Math.max(14, Math.round(Math.min(doc.canvas.width, doc.canvas.height) * 0.0115));
   for (const layer of texts) {
     if (layer.overflow) {
       issues.push({
@@ -258,6 +260,27 @@ export function checkComposition(doc: DesignDocument): ComponentScore {
   return component("composition", issues);
 }
 
+export interface LayoutMetrics {
+  /** Share of the canvas carrying content, 0–1. */
+  coverage: number;
+  /** Tallest empty horizontal band, as a fraction of canvas height. */
+  emptyBand: number;
+  /** 0 = perfectly balanced, 1 = everything on one side. */
+  balanceH: number;
+  balanceV: number;
+}
+
+/** The raw measurements behind the composition score, for evals and debugging. */
+export function layoutMetrics(doc: DesignDocument): LayoutMetrics {
+  const balance = weightBalance(doc);
+  return {
+    coverage: inkCoverage(doc),
+    emptyBand: largestEmptyBand(doc).fraction,
+    balanceH: balance.horizontal,
+    balanceV: balance.vertical,
+  };
+}
+
 /** Longest run of canvas rows with nothing on them, as a fraction of height. */
 function largestEmptyBand(doc: DesignDocument): { fraction: number; start: number } {
   const step = 8;
@@ -310,16 +333,25 @@ function weightBalance(doc: DesignDocument): { horizontal: number; vertical: num
       ? { x: layer.x, y: layer.y, width: layer.width, height: layer.height }
       : boundsOf(layer);
     const area = Math.max(1, b.width * b.height) * (isText(layer) ? 1.4 : 1);
-    const centreX = b.x + b.width / 2;
-    const centreY = b.y + b.height / 2;
-    if (centreX < cx) left += area;
-    else right += area;
-    if (centreY < cy) top += area;
-    else bottom += area;
+    // Split an element that straddles an axis by how much of it lies on each
+    // side. Counting it by its centre put every full-width column — centred
+    // exactly on the axis — wholly on the right, so every poster "leaned".
+    const leftShare = shareBefore(b.x, b.width, cx);
+    const topShare = shareBefore(b.y, b.height, cy);
+    left += area * leftShare;
+    right += area * (1 - leftShare);
+    top += area * topShare;
+    bottom += area * (1 - topShare);
   }
   const h = left + right === 0 ? 0 : Math.abs(left - right) / (left + right);
   const v = top + bottom === 0 ? 0 : Math.abs(top - bottom) / (top + bottom);
   return { horizontal: h, vertical: v };
+}
+
+/** Fraction of the span [start, start + length] lying before `axis`. */
+function shareBefore(start: number, length: number, axis: number): number {
+  if (length <= 0) return start < axis ? 1 : 0;
+  return Math.max(0, Math.min(1, (axis - start) / length));
 }
 
 function inkCoverage(doc: DesignDocument): number {
